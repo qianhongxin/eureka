@@ -40,6 +40,7 @@ import com.google.inject.ImplementedBy;
  *
  */
 @ImplementedBy(CloudInstanceConfig.class)
+// 服务实例相关的配置信息
 public interface EurekaInstanceConfig {
 
     /**

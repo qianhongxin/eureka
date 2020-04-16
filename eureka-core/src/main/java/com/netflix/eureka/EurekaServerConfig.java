@@ -36,6 +36,10 @@ import java.util.Set;
  * @author Karthik Ranganathan
  *
  */
+// 获取eureka-server.properties文件中的配置数据，通过暴露一个接口，在接口中定义方法，方法中硬编码key，然后通
+// 过DynamicStringProperty获取配置数据。方便操作
+// 本质就是配置获取管理
+// 如果配置项我们没设置，会返回默认值
 public interface EurekaServerConfig {
 
     /**

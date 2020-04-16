@@ -54,6 +54,7 @@ import org.slf4j.LoggerFactory;
 @Serializer("com.netflix.discovery.converters.EntityBodyConverter")
 @XStreamAlias("instance")
 @JsonRootName("instance")
+// instance的明细信息
 public class InstanceInfo {
 
     /**

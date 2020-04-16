@@ -52,6 +52,7 @@ import com.netflix.discovery.shared.transport.EurekaTransportConfig;
  *
  */
 @ImplementedBy(DefaultEurekaClientConfig.class)
+// eureka-client的配置信息
 public interface EurekaClientConfig {
 
     /**

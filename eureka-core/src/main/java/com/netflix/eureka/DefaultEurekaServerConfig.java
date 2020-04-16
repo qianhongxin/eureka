@@ -68,6 +68,7 @@ public class DefaultEurekaServerConfig implements EurekaServerConfig {
             .getLogger(DefaultEurekaServerConfig.class);
     private static final DynamicPropertyFactory configInstance = com.netflix.config.DynamicPropertyFactory
             .getInstance();
+    // DynamicStringProperty中的配置来自ConfigurationManager
     private static final DynamicStringProperty EUREKA_PROPS_FILE = DynamicPropertyFactory
             .getInstance().getStringProperty("eureka.server.props",
                     "eureka-server");
@@ -77,10 +78,14 @@ public class DefaultEurekaServerConfig implements EurekaServerConfig {
 
     // These counters are checked for each HTTP request. Instantiating them per request like for the other
     // properties would be too costly.
+    // DynamicStringProperty中的配置来自ConfigurationManager
     private final DynamicStringSetProperty rateLimiterPrivilegedClients =
             new DynamicStringSetProperty(namespace + "rateLimiter.privilegedClients", Collections.<String>emptySet());
+    // DynamicStringProperty中的配置来自ConfigurationManager
     private final DynamicBooleanProperty rateLimiterEnabled = configInstance.getBooleanProperty(namespace + "rateLimiter.enabled", false);
+    // DynamicStringProperty中的配置来自ConfigurationManager
     private final DynamicBooleanProperty rateLimiterThrottleStandardClients = configInstance.getBooleanProperty(namespace + "rateLimiter.throttleStandardClients", false);
+    // DynamicStringProperty中的配置来自ConfigurationManager
     private final DynamicIntProperty rateLimiterBurstSize = configInstance.getIntProperty(namespace + "rateLimiter.burstSize", 10);
     private final DynamicIntProperty rateLimiterRegistryFetchAverageRate = configInstance.getIntProperty(namespace + "rateLimiter.registryFetchAverageRate", 500);
     private final DynamicIntProperty rateLimiterFullFetchAverageRate = configInstance.getIntProperty(namespace + "rateLimiter.fullFetchAverageRate", 100);
@@ -103,10 +108,14 @@ public class DefaultEurekaServerConfig implements EurekaServerConfig {
         ConfigurationManager.getConfigInstance().setProperty(
                 ARCHAIUS_DEPLOYMENT_ENVIRONMENT, env);
 
+        // EUREKA_PROPS_FILE对应的就是eureka-server
         String eurekaPropsFile = EUREKA_PROPS_FILE.get();
         try {
             // ConfigurationManager
             // .loadPropertiesFromResources(eurekaPropsFile);
+            // 将eurekaPropsFile后拼接.properties，然后加载文件中的配置到properties对象中，
+            // 然后会加载eureka-server-环境.properties,然后覆盖porperties。
+            // 然后将配置交给ConfigurationManager管理
             ConfigurationManager
                     .loadCascadedPropertiesFromResources(eurekaPropsFile);
         } catch (IOException e) {

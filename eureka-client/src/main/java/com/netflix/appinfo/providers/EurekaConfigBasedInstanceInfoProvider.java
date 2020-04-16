@@ -55,6 +55,7 @@ public class EurekaConfigBasedInstanceInfoProvider implements Provider<InstanceI
             }
 
             // Builder the instance information to be registered with eureka server
+            // 根据EurekaInstanceConfig的配置信息，用InstanceInfo的构造器创建代表一个服务实例的对象
             InstanceInfo.Builder builder = InstanceInfo.Builder.newBuilder(vipAddressResolver);
 
             // set the appropriate id for the InstanceInfo, falling back to datacenter Id if applicable, else hostname
@@ -81,6 +82,7 @@ public class EurekaConfigBasedInstanceInfoProvider implements Provider<InstanceI
                 defaultAddress = config.getIpAddress();
             }
 
+            // 设置服务实例信息
             builder.setNamespace(config.getNamespace())
                     .setInstanceId(instanceId)
                     .setAppName(config.getAppname())
@@ -113,6 +115,7 @@ public class EurekaConfigBasedInstanceInfoProvider implements Provider<InstanceI
             }
 
             // Add any user-specific metadata information
+            // 我们自己定义的元数据，放入instanceInfo中
             for (Map.Entry<String, String> mapEntry : config.getMetadataMap().entrySet()) {
                 String key = mapEntry.getKey();
                 String value = mapEntry.getValue();

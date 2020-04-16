@@ -182,6 +182,7 @@ public class DiscoveryClient implements EurekaClient {
 
     private final long initTimestampMs;
 
+    // 支持底层的eureka-client和eureka-server网络通信的组件
     private static final class EurekaTransport {
         private ClosableResolver bootstrapResolver;
         private TransportClientFactory transportClientFactory;
@@ -310,13 +311,16 @@ public class DiscoveryClient implements EurekaClient {
         }
         
         this.applicationInfoManager = applicationInfoManager;
+        // 设置服务实例
         InstanceInfo myInfo = applicationInfoManager.getInfo();
 
         clientConfig = config;
         staticClientConfig = clientConfig;
+        // 拿到并设置transportConfig
         transportConfig = config.getTransportConfig();
         instanceInfo = myInfo;
         if (myInfo != null) {
+            //instanceInfo.getAppName()，一个服务会有多个实例，但是instanceInfo.getId()是唯一的
             appPathIdentifier = instanceInfo.getAppName() + "/" + instanceInfo.getId();
         } else {
             logger.warn("Setting instanceInfo to a passed in null value");
@@ -1239,6 +1243,7 @@ public class DiscoveryClient implements EurekaClient {
             // registry cache refresh timer
             int registryFetchIntervalSeconds = clientConfig.getRegistryFetchIntervalSeconds();
             int expBackOffBound = clientConfig.getCacheRefreshExecutorExponentialBackOffBound();
+            // 抓取注册节点
             scheduler.schedule(
                     new TimedSupervisorTask(
                             "cacheRefresh",
@@ -1271,6 +1276,7 @@ public class DiscoveryClient implements EurekaClient {
                     renewalIntervalInSecs, TimeUnit.SECONDS);
 
             // InstanceInfo replicator
+            // 副本复制，高可用
             instanceInfoReplicator = new InstanceInfoReplicator(
                     this,
                     instanceInfo,

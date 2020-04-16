@@ -128,6 +128,9 @@ public class EurekaBootStrap implements ServletContextListener {
     protected void initEurekaEnvironment() throws Exception {
         logger.info("Setting the eureka configuration..");
 
+        // ConfigurationManager是netflix是config项目源码。ConfigurationManager是个单例模式，里面有eureka的所有配置
+        // 信息
+        // datacenter是数据中心，没有手动设置就用default
         String dataCenter = ConfigurationManager.getConfigInstance().getString(EUREKA_DATACENTER);
         if (dataCenter == null) {
             logger.info("Eureka data center value eureka.datacenter is not set, defaulting to default");
@@ -135,6 +138,7 @@ public class EurekaBootStrap implements ServletContextListener {
         } else {
             ConfigurationManager.getConfigInstance().setProperty(ARCHAIUS_DEPLOYMENT_DATACENTER, dataCenter);
         }
+        // 运行环境，没有手动设置就用默认的test
         String environment = ConfigurationManager.getConfigInstance().getString(EUREKA_ENVIRONMENT);
         if (environment == null) {
             ConfigurationManager.getConfigInstance().setProperty(ARCHAIUS_DEPLOYMENT_ENVIRONMENT, TEST);
@@ -146,7 +150,8 @@ public class EurekaBootStrap implements ServletContextListener {
      * init hook for server context. Override for custom logic.
      */
     protected void initEurekaServerContext() throws Exception {
-        // 内部会加载eureka-server的resources下的eureka-server.properties文件的配置
+        // 第一步：内部会加载eureka-server的resources下的eureka-server.properties文件的配置
+        // 将配置放入DynamicxxxProperty
         EurekaServerConfig eurekaServerConfig = new DefaultEurekaServerConfig();
 
         // For backward compatibility
@@ -158,25 +163,29 @@ public class EurekaBootStrap implements ServletContextListener {
         logger.info(eurekaServerConfig.getJsonCodecName());
         ServerCodecs serverCodecs = new DefaultServerCodecs(eurekaServerConfig);
 
-        // 应用信息管理器
+        // 第二步：初始化eureka-server内部的一个eureka-client（用来跟其他eureka-server节点进行注册和通信的）
         ApplicationInfoManager applicationInfoManager = null;
 
         if (eurekaClient == null) {
             EurekaInstanceConfig instanceConfig = isCloud(ConfigurationManager.getDeploymentContext())
                     ? new CloudInstanceConfig()
                     : new MyDataCenterInstanceConfig();
-            
+
+            // 基于instanceConfig，instanceInfo构造了这个applicationInfoManager
+            // 后面基于applicationInfoManager对instanceInfo和instanceConfig进行管理
             applicationInfoManager = new ApplicationInfoManager(
                     instanceConfig, new EurekaConfigBasedInstanceInfoProvider(instanceConfig).get());
 
             // eureka的client配置数据
             // 内部会加载eureka-server的resources下的eureka-client.properties文件的配置
             EurekaClientConfig eurekaClientConfig = new DefaultEurekaClientConfig();
+            // 基于applicationInfoManager和eurekaClientConfig构造eurekaClient。用子类DiscoveryClient构造
             eurekaClient = new DiscoveryClient(applicationInfoManager, eurekaClientConfig);
         } else {
             applicationInfoManager = eurekaClient.getApplicationInfoManager();
         }
 
+        // 第三步：处理注册相关的事情
         PeerAwareInstanceRegistry registry;
         // 判断数据中心是否在aws云
         if (isAws(applicationInfoManager.getInfo())) {
@@ -197,6 +206,7 @@ public class EurekaBootStrap implements ServletContextListener {
             );
         }
 
+        // 第四步：处理peer节点相关的事情
         PeerEurekaNodes peerEurekaNodes = getPeerEurekaNodes(
                 registry,
                 eurekaServerConfig,
@@ -205,7 +215,7 @@ public class EurekaBootStrap implements ServletContextListener {
                 applicationInfoManager
         );
 
-        // 创建eureka服务上下文
+        // 第五步：完成eureka server服务上下文
         serverContext = new DefaultEurekaServerContext(
                 eurekaServerConfig,
                 serverCodecs,
@@ -222,6 +232,7 @@ public class EurekaBootStrap implements ServletContextListener {
         logger.info("Initialized server context");
 
         // Copy registry from neighboring eureka node
+        // 第六步：处理善后事情，从相邻eureka节点拷贝注册信息
         int registryCount = registry.syncUp();
         registry.openForTraffic(applicationInfoManager, registryCount);
 

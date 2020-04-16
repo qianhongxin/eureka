@@ -5,6 +5,7 @@ package com.netflix.discovery.shared.transport;
  *
  * @author David Liu
  */
+//基于接口的配置信息获取
 public interface EurekaTransportConfig {
 
     /**
