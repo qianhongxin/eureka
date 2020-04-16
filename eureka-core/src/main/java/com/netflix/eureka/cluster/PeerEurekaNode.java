@@ -345,6 +345,7 @@ public class PeerEurekaNode {
 
     /**
      * Shuts down all resources used for peer replication.
+     *
      */
     public void shutDown() {
         batchingDispatcher.shutdown();

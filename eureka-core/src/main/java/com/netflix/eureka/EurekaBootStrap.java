@@ -146,16 +146,19 @@ public class EurekaBootStrap implements ServletContextListener {
      * init hook for server context. Override for custom logic.
      */
     protected void initEurekaServerContext() throws Exception {
+        // 内部会加载eureka-server的resources下的eureka-server.properties文件的配置
         EurekaServerConfig eurekaServerConfig = new DefaultEurekaServerConfig();
 
         // For backward compatibility
         JsonXStream.getInstance().registerConverter(new V1AwareInstanceInfoConverter(), XStream.PRIORITY_VERY_HIGH);
         XmlXStream.getInstance().registerConverter(new V1AwareInstanceInfoConverter(), XStream.PRIORITY_VERY_HIGH);
 
+        // 因为eureka服务端本身也作为一个client，将自己注册到集群其他的节点
         logger.info("Initializing the eureka client...");
         logger.info(eurekaServerConfig.getJsonCodecName());
         ServerCodecs serverCodecs = new DefaultServerCodecs(eurekaServerConfig);
 
+        // 应用信息管理器
         ApplicationInfoManager applicationInfoManager = null;
 
         if (eurekaClient == null) {
@@ -165,7 +168,9 @@ public class EurekaBootStrap implements ServletContextListener {
             
             applicationInfoManager = new ApplicationInfoManager(
                     instanceConfig, new EurekaConfigBasedInstanceInfoProvider(instanceConfig).get());
-            
+
+            // eureka的client配置数据
+            // 内部会加载eureka-server的resources下的eureka-client.properties文件的配置
             EurekaClientConfig eurekaClientConfig = new DefaultEurekaClientConfig();
             eurekaClient = new DiscoveryClient(applicationInfoManager, eurekaClientConfig);
         } else {
@@ -173,6 +178,7 @@ public class EurekaBootStrap implements ServletContextListener {
         }
 
         PeerAwareInstanceRegistry registry;
+        // 判断数据中心是否在aws云
         if (isAws(applicationInfoManager.getInfo())) {
             registry = new AwsInstanceRegistry(
                     eurekaServerConfig,
@@ -199,6 +205,7 @@ public class EurekaBootStrap implements ServletContextListener {
                 applicationInfoManager
         );
 
+        // 创建eureka服务上下文
         serverContext = new DefaultEurekaServerContext(
                 eurekaServerConfig,
                 serverCodecs,
@@ -207,8 +214,10 @@ public class EurekaBootStrap implements ServletContextListener {
                 applicationInfoManager
         );
 
+        // 将serverContext放入threadLocal中
         EurekaServerContextHolder.initialize(serverContext);
 
+        // 初始化serverContext
         serverContext.initialize();
         logger.info("Initialized server context");
 
