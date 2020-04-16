@@ -116,12 +116,20 @@ public class ExampleEurekaClient {
         }
     }
 
+    //eureka的构造和启动
     public static void main(String[] args) throws UnknownHostException {
+        // 设置配置信息
         injectEurekaConfiguration();
 
         ExampleEurekaClient sampleClient = new ExampleEurekaClient();
 
         // create the client
+        // （1）读取eureka-client.properties配置文件，邢衡一个服务实例配置，基于接口对外提供服务实例的配置项的读取
+        // （2）基于服务实例的配置，构造来一个服务实例（instanceInfo）
+        // （3）基于服务实例的配置和服务实例，构造了一个服务实例管理器（ApplicationInfoManager）
+        // （4）读取eureka-client.properties 配置文件，形成一个eureka client的配置，通过接口对外提供eureka client的配置项的读取
+        // （5）基于eureka client配置，和服务实例管理器，来构造了一个EurekaClient（DiscoveryClient），保存
+        // 了一些配置，处理服务的注册和注册表的抓取，启动了几个线程池，启动了网络通信组件，启动了一些调度任务，注册了监控项
         ApplicationInfoManager applicationInfoManager = initializeApplicationInfoManager(new MyDataCenterInstanceConfig());
         EurekaClient client = initializeEurekaClient(applicationInfoManager, new DefaultEurekaClientConfig());
 
@@ -133,6 +141,7 @@ public class ExampleEurekaClient {
         eurekaClient.shutdown();
     }
 
+    // 手动设置client的配置信息
     private static void injectEurekaConfiguration() throws UnknownHostException {
         String myHostName = InetAddress.getLocalHost().getHostName();
         String myServiceUrl = "http://" + myHostName + ":8080/v2/";
@@ -141,7 +150,7 @@ public class ExampleEurekaClient {
         System.setProperty("eureka.name", "eureka");
         System.setProperty("eureka.vipAddress", "eureka.mydomain.net");
         System.setProperty("eureka.port", "8080");
-        System.setProperty("eureka.preferSameZone", "false");
+        System.setProperty("eureka.preferSameZone", "true");
         System.setProperty("eureka.shouldUseDns", "false");
         System.setProperty("eureka.shouldFetchRegistry", "false");
         System.setProperty("eureka.serviceUrl.defaultZone", myServiceUrl);
