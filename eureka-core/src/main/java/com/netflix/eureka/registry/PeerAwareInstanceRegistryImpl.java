@@ -201,6 +201,8 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
      * Populates the registry information from a peer eureka node. This
      * operation fails over to other nodes until the list is exhausted if the
      * communication fails.
+     *
+     * 从相邻的一个server节点拷贝注册表信息，如果拷贝失败，就找下一个
      */
     @Override
     public int syncUp() {
