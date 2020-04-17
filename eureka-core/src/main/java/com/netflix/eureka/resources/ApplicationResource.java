@@ -138,6 +138,10 @@ public class ApplicationResource {
      * @param isReplication
      *            a header parameter containing information whether this is
      *            replicated from other nodes.
+     *
+     * 接受client的注册接口
+     *
+     * 自定义的http请求头：x-netflix-discovery-replication
      */
     @POST
     @Consumes({"application/json", "application/xml"})

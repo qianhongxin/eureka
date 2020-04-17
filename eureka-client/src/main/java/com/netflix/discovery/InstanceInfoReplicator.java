@@ -60,8 +60,11 @@ class InstanceInfoReplicator implements Runnable {
     }
 
     public void start(int initialDelayMs) {
+        // AtomicBoolean + cas保证可见性和原子性来保证并发安全，只让一个线程执行
         if (started.compareAndSet(false, true)) {
+            // 初始注册，设置注册时间
             instanceInfo.setIsDirty();  // for initial register
+            // 实例复制器加入任务调度，内部将本节点注册到eureka-server
             Future next = scheduler.schedule(this, initialDelayMs, TimeUnit.SECONDS);
             scheduledPeriodicRef.set(next);
         }
@@ -102,8 +105,9 @@ class InstanceInfoReplicator implements Runnable {
 
     public void run() {
         try {
+            // 刷新实例配置信息
             discoveryClient.refreshInstanceInfo();
-
+            // 如果
             Long dirtyTimestamp = instanceInfo.isDirtyWithTime();
             if (dirtyTimestamp != null) {
                 discoveryClient.register();
@@ -112,6 +116,7 @@ class InstanceInfoReplicator implements Runnable {
         } catch (Throwable t) {
             logger.warn("There was a problem with the instance info replicator", t);
         } finally {
+            // 重新将任务加入调度
             Future next = scheduler.schedule(this, replicationIntervalSeconds, TimeUnit.SECONDS);
             scheduledPeriodicRef.set(next);
         }
