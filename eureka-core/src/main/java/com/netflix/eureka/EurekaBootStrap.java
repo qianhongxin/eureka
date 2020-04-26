@@ -64,6 +64,8 @@ import org.slf4j.LoggerFactory;
  * @author Karthik Ranganathan, Greg Kim, David Liu
  *
  */
+// server端启动类，通过http容器的监听器ServletContextListener调用启动。
+// eureka的server端就是个web项目
 public class EurekaBootStrap implements ServletContextListener {
     private static final Logger logger = LoggerFactory.getLogger(EurekaBootStrap.class);
 
@@ -112,9 +114,11 @@ public class EurekaBootStrap implements ServletContextListener {
         try {
             // 初始化eureka的server环境
             initEurekaEnvironment();
+            // 初始化serverContext
             initEurekaServerContext();
 
             ServletContext sc = event.getServletContext();
+            // 将serverContext放入 sc 中
             sc.setAttribute(EurekaServerContext.class.getName(), serverContext);
         } catch (Throwable e) {
             logger.error("Cannot bootstrap eureka server :", e);
@@ -165,6 +169,7 @@ public class EurekaBootStrap implements ServletContextListener {
         ServerCodecs serverCodecs = new DefaultServerCodecs(eurekaServerConfig);
 
         // 第二步：初始化eureka-server内部的一个eureka-client（用来跟其他eureka-server节点进行注册和通信的）
+        // ApplicationInfoManager是个管理器
         ApplicationInfoManager applicationInfoManager = null;
 
         if (eurekaClient == null) {
@@ -228,6 +233,7 @@ public class EurekaBootStrap implements ServletContextListener {
         );
 
         // 将serverContext放入EurekaServerContextHolder中，之后谁要使用，直接从EurekaServerContextHolder获取
+        // status.jsp中就有从这里获取数据
         EurekaServerContextHolder.initialize(serverContext);
 
         // 初始化serverContext

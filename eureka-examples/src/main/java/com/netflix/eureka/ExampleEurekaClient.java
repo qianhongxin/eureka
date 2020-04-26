@@ -116,7 +116,8 @@ public class ExampleEurekaClient {
         }
     }
 
-    //eureka的构造和启动
+    // eureka的构造和启动
+    // eureka-client的构造和启动
     public static void main(String[] args) throws UnknownHostException {
         // 设置配置信息
         injectEurekaConfiguration();
