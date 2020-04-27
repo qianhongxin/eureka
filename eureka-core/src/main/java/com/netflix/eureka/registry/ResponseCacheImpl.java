@@ -77,7 +77,9 @@ public class ResponseCacheImpl implements ResponseCache {
 
     private static final Logger logger = LoggerFactory.getLogger(ResponseCacheImpl.class);
 
+    // 全部实例信息的key
     public static final String ALL_APPS = "ALL_APPS";
+    // 全部增量实例信息的key
     public static final String ALL_APPS_DELTA = "ALL_APPS_DELTA";
 
     // FIXME deprecated, here for backwards compatibility.
@@ -112,9 +114,16 @@ public class ResponseCacheImpl implements ResponseCache {
                 }
             });
 
+    // 只读缓存
+    // 被动过期 readOnlyCacheMap，默认30s执行一次。
+    // 所以当一个实例下线了，readWriteCacheMap会实时感知到，但最多30s readOnlyCacheMap会感知到
     private final ConcurrentMap<Key, Value> readOnlyCacheMap = new ConcurrentHashMap<Key, Value>();
 
+    // 读写缓存
+    // 服务注册，下线，故障的时候，会去刷新这个缓存
+    // 主动过期，180s定时调度
     private final LoadingCache<Key, Value> readWriteCacheMap;
+    // 默认为true
     private final boolean shouldUseReadOnlyResponseCache;
     private final AbstractInstanceRegistry registry;
     private final EurekaServerConfig serverConfig;
@@ -123,12 +132,15 @@ public class ResponseCacheImpl implements ResponseCache {
     ResponseCacheImpl(EurekaServerConfig serverConfig, ServerCodecs serverCodecs, AbstractInstanceRegistry registry) {
         this.serverConfig = serverConfig;
         this.serverCodecs = serverCodecs;
+        // 默认true
         this.shouldUseReadOnlyResponseCache = serverConfig.shouldUseReadOnlyResponseCache();
         this.registry = registry;
 
+        //默认30s
         long responseCacheUpdateIntervalMs = serverConfig.getResponseCacheUpdateIntervalMs();
         this.readWriteCacheMap =
                 CacheBuilder.newBuilder().initialCapacity(1000)
+                        // 180s定时过期读写缓存
                         .expireAfterWrite(serverConfig.getResponseCacheAutoExpirationInSeconds(), TimeUnit.SECONDS)
                         .removalListener(new RemovalListener<Key, Value>() {
                             @Override
@@ -153,6 +165,8 @@ public class ResponseCacheImpl implements ResponseCache {
                         });
 
         if (shouldUseReadOnlyResponseCache) {
+            // 被动过期 readOnlyCacheMap，默认30s执行一次。
+            // 所以当一个实例下线了，readWriteCacheMap会实时感知到，但最多30s readOnlyCacheMap会感知到
             timer.schedule(getCacheUpdateTask(),
                     new Date(((System.currentTimeMillis() / responseCacheUpdateIntervalMs) * responseCacheUpdateIntervalMs)
                             + responseCacheUpdateIntervalMs),
@@ -180,6 +194,7 @@ public class ResponseCacheImpl implements ResponseCache {
                         CurrentRequestVersion.set(key.getVersion());
                         Value cacheValue = readWriteCacheMap.get(key);
                         Value currentCacheValue = readOnlyCacheMap.get(key);
+                        // Value被创建后就不允许改变，所以可以这样比较
                         if (cacheValue != currentCacheValue) {
                             readOnlyCacheMap.put(key, cacheValue);
                         }
@@ -341,15 +356,19 @@ public class ResponseCacheImpl implements ResponseCache {
      * Get the payload in both compressed and uncompressed form.
      */
     @VisibleForTesting
+    // 从缓存中获取数据
     Value getValue(final Key key, boolean useReadOnlyCache) {
         Value payload = null;
         try {
             if (useReadOnlyCache) {
+                // 先从只读缓存查数据
                 final Value currentPayload = readOnlyCacheMap.get(key);
                 if (currentPayload != null) {
                     payload = currentPayload;
                 } else {
+                    // 查不到，从读写缓存获取数据
                     payload = readWriteCacheMap.get(key);
+                    // 同时将数据放入只读缓存
                     readOnlyCacheMap.put(key, payload);
                 }
             } else {
@@ -364,6 +383,7 @@ public class ResponseCacheImpl implements ResponseCache {
     /**
      * Generate pay load with both JSON and XML formats for all applications.
      */
+    // 将Applications对象序列化为了一个json字符串，将注册表中读取出来的Applications，放入读写缓存，接着放入只读缓存中去
     private String getPayLoad(Key key, Applications apps) {
         EncoderWrapper encoderWrapper = serverCodecs.getEncoder(key.getType(), key.getEurekaAccept());
         String result;
@@ -507,6 +527,7 @@ public class ResponseCacheImpl implements ResponseCache {
                 Stopwatch tracer = compressPayloadTimer.start();
                 try {
                     ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                    // GZIP压缩数据
                     GZIPOutputStream out = new GZIPOutputStream(bos);
                     byte[] rawBytes = payload.getBytes();
                     out.write(rawBytes);

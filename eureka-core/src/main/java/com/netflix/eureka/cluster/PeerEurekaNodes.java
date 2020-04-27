@@ -85,7 +85,7 @@ public class PeerEurekaNodes {
                 }
         );
         try {
-            // 更新eureka集群信息，让eureka server 感知到所有其他的server的数据
+            // 更新eureka集群信息，让eureka server 感知到所有其他的eureka-server集群节点的数据
             updatePeerEurekaNodes(resolvePeerUrls());
             Runnable peersUpdateTask = new Runnable() {
                 @Override
@@ -98,7 +98,7 @@ public class PeerEurekaNodes {
 
                 }
             };
-            // 定时刷新eureka集群信息
+            // 定时刷新eureka集群信息，默认是10分钟更新一次
             taskExecutor.scheduleWithFixedDelay(
                     peersUpdateTask,
                     serverConfig.getPeerEurekaNodesUpdateIntervalMs(),

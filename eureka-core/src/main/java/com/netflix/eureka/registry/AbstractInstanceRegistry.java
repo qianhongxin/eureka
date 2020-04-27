@@ -239,6 +239,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
             if (existingLease != null) {
                 lease.setServiceUpTimestamp(existingLease.getServiceUpTimestamp());
             }
+            // 更新实例信息
             gMap.put(registrant.getId(), lease);
             // 加入最近注册队列
             // 用synchronized保证recentRegisteredQueue对象及其属性的可见性，方法的原子性
