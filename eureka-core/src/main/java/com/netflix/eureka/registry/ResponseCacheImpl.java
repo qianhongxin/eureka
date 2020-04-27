@@ -254,6 +254,7 @@ public class ResponseCacheImpl implements ResponseCache {
      *
      * @param appName the application name of the application.
      */
+    // 过期各种缓存
     @Override
     public void invalidate(String appName, @Nullable String vipAddress, @Nullable String secureVipAddress) {
         for (Key.KeyType type : Key.KeyType.values()) {

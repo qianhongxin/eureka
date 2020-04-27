@@ -50,6 +50,8 @@ import org.slf4j.LoggerFactory;
  *
  */
 @Produces({"application/xml", "application/json"})
+// 负责client的心跳相关操作的
+// 心跳机制对系统很重要，特别是分布式系统。可以让别的系统知道她还活着。否则怎么判读是否存活？ddia中有说明
 public class InstanceResource {
     private static final Logger logger = LoggerFactory
             .getLogger(InstanceResource.class);
@@ -103,12 +105,14 @@ public class InstanceResource {
      *         failure.
      */
     @PUT
+    // 接受客户端的续约请求
     public Response renewLease(
             @HeaderParam(PeerEurekaNode.HEADER_REPLICATION) String isReplication,
             @QueryParam("overriddenstatus") String overriddenStatus,
             @QueryParam("status") String status,
             @QueryParam("lastDirtyTimestamp") String lastDirtyTimestamp) {
         boolean isFromReplicaNode = "true".equals(isReplication);
+        // 通过注册表的renew方法，完成服务续约
         boolean isSuccess = registry.renew(app.getName(), id, isFromReplicaNode);
 
         // Not found in the registry, immediately ask for a register

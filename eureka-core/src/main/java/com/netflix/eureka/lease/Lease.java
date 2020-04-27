@@ -59,6 +59,7 @@ public class Lease<T> {
      * associated {@link T} during registration, otherwise default duration is
      * {@link #DEFAULT_DURATION_IN_SECS}.
      */
+    // 更新下lastUpdateTimestamp
     public void renew() {
         lastUpdateTimestamp = System.currentTimeMillis() + duration;
 
@@ -67,6 +68,7 @@ public class Lease<T> {
     /**
      * Cancels the lease by updating the eviction time.
      */
+    // 设置服务下线时间戳
     public void cancel() {
         if (evictionTimestamp <= 0) {
             evictionTimestamp = System.currentTimeMillis();

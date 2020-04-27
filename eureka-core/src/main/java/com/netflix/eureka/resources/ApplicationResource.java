@@ -125,6 +125,7 @@ public class ApplicationResource {
      * @return information about a particular instance.
      */
     @Path("{id}")
+    // 供客户端心跳线程调用
     public InstanceResource getInstanceInfo(@PathParam("id") String id) {
         return new InstanceResource(this, id, serverConfig, registry);
     }

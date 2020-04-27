@@ -837,6 +837,9 @@ public class DiscoveryClient implements EurekaClient {
     boolean renew() {
         EurekaHttpResponse<InstanceInfo> httpResponse;
         try {
+            // 发送心跳
+            // AbstractJersey2EurekaHttpClient先调用的是ApplicationResource的getInstanceInfo方法
+            // 再调用InstanceResource的renewLease方法
             httpResponse = eurekaTransport.registrationClient.sendHeartBeat(instanceInfo.getAppName(), instanceInfo.getId(), instanceInfo, null);
             logger.debug("{} - Heartbeat status: {}", PREFIX + appPathIdentifier, httpResponse.getStatusCode());
             if (httpResponse.getStatusCode() == 404) {
@@ -877,7 +880,9 @@ public class DiscoveryClient implements EurekaClient {
      */
     @PreDestroy
     @Override
+    // 客户端下线执行逻辑，即shutdown
     public synchronized void shutdown() {
+        // 原子设置
         if (isShutdown.compareAndSet(false, true)) {
             logger.info("Shutting down DiscoveryClient ...");
 
@@ -885,18 +890,23 @@ public class DiscoveryClient implements EurekaClient {
                 applicationInfoManager.unregisterStatusChangeListener(statusChangeListener.getId());
             }
 
+            // 取消当前系统中存在的调度任务
             cancelScheduledTasks();
 
             // If APPINFO was registered
             if (applicationInfoManager != null && clientConfig.shouldRegisterWithEureka()) {
+                // 将服务实力的状态的设置为DOWN
                 applicationInfoManager.setInstanceStatus(InstanceStatus.DOWN);
+                // 核心方法：取消注册
                 unregister();
             }
 
+            // 关闭网络通信组件
             if (eurekaTransport != null) {
                 eurekaTransport.shutdown();
             }
 
+            // 关闭监听器
             heartbeatStalenessMonitor.shutdown();
             registryStalenessMonitor.shutdown();
 
@@ -912,6 +922,9 @@ public class DiscoveryClient implements EurekaClient {
         if(eurekaTransport != null && eurekaTransport.registrationClient != null) {
             try {
                 logger.info("Unregistering ...");
+                // 调用cacel方法
+                // AbstractJersey2EurekaHttpClient先调用的是ApplicationResource的getInstanceInfo方法
+                // 再调用InstanceResource的cancelLease方法
                 EurekaHttpResponse<Void> httpResponse = eurekaTransport.registrationClient.cancel(instanceInfo.getAppName(), instanceInfo.getId());
                 logger.info(PREFIX + appPathIdentifier + " - deregister  status: " + httpResponse.getStatusCode());
             } catch (Exception e) {
@@ -1276,7 +1289,7 @@ public class DiscoveryClient implements EurekaClient {
         }
 
         if (clientConfig.shouldRegisterWithEureka()) {
-            // 续约时间
+            // 续约时间，默认30s。每隔30s去续约一次
             int renewalIntervalInSecs = instanceInfo.getLeaseInfo().getRenewalIntervalInSecs();
             int expBackOffBound = clientConfig.getHeartbeatExecutorExponentialBackOffBound();
             logger.info("Starting heartbeat executor: " + "renew interval is: " + renewalIntervalInSecs);
@@ -1412,9 +1425,11 @@ public class DiscoveryClient implements EurekaClient {
     /**
      * The heartbeat task that renews the lease in the given intervals.
      */
+    // 心跳线程
     private class HeartbeatThread implements Runnable {
 
         public void run() {
+            // 服务续约
             if (renew()) {
                 lastSuccessfulHeartbeatTimestamp = System.currentTimeMillis();
             }

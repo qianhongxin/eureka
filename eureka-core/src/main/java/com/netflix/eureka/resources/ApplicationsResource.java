@@ -190,6 +190,7 @@ public class ApplicationsResource {
      */
     @Path("delta")
     @GET
+    //抓取增量注册表
     public Response getContainerDifferential(
             @PathParam("version") String version,
             @HeaderParam(HEADER_ACCEPT) String acceptHeader,

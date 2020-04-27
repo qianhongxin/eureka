@@ -299,6 +299,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
      * @return true if the instance was removed from the {@link AbstractInstanceRegistry} successfully, false otherwise.
      */
     @Override
+    // 服务下线
     public boolean cancel(String appName, String id, boolean isReplication) {
         return internalCancel(appName, id, isReplication);
     }
@@ -308,8 +309,11 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
      * cancel request is replicated to the peers. This is however not desired for expires which would be counted
      * in the remote peers as valid cancellations, so self preservation mode would not kick-in.
      */
+    // 执行服务下线逻辑
+    // 代码中的if eles需要抽出来，直接if就行
     protected boolean internalCancel(String appName, String id, boolean isReplication) {
         try {
+            // 加读锁，此时不能进行写操作。如果此时写锁被人获取了，此处的读锁也会阻塞
             read.lock();
             CANCEL.increment(isReplication);
             Map<String, Lease<InstanceInfo>> gMap = registry.get(appName);
@@ -318,6 +322,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                 leaseToCancel = gMap.remove(id);
             }
             synchronized (recentCanceledQueue) {
+                // 加入最近下线的队列
                 recentCanceledQueue.add(new Pair<Long, String>(System.currentTimeMillis(), appName + "(" + id + ")"));
             }
             InstanceStatus instanceStatus = overriddenInstanceStatusMap.remove(id);
@@ -329,17 +334,21 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                 logger.warn("DS: Registry: cancel failed because Lease is not registered for: {}/{}", appName, id);
                 return false;
             } else {
+                // 核心方法
                 leaseToCancel.cancel();
+
                 InstanceInfo instanceInfo = leaseToCancel.getHolder();
                 String vip = null;
                 String svip = null;
                 if (instanceInfo != null) {
                     instanceInfo.setActionType(ActionType.DELETED);
+                    // 将服务实例放入最新更新队列中（服务注册，故障也会放入这个队列）
                     recentlyChangedQueue.add(new RecentlyChangedItem(leaseToCancel));
                     instanceInfo.setLastUpdatedTimestamp();
                     vip = instanceInfo.getVIPAddress();
                     svip = instanceInfo.getSecureVipAddress();
                 }
+                // 过期注册表缓存
                 invalidateCache(appName, vip, svip);
                 logger.info("Cancelled instance {}/{} (replication={})", appName, id, isReplication);
                 return true;
@@ -355,8 +364,10 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
      *
      * @see com.netflix.eureka.lease.LeaseManager#renew(java.lang.String, java.lang.String, boolean)
      */
+    // 服务续约
     public boolean renew(String appName, String id, boolean isReplication) {
         RENEW.increment(isReplication);
+        // 从注册表中获取
         Map<String, Lease<InstanceInfo>> gMap = registry.get(appName);
         Lease<InstanceInfo> leaseToRenew = null;
         if (gMap != null) {
@@ -367,7 +378,10 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
             logger.warn("DS: Registry: lease doesn't exist, registering resource: {} - {}", appName, id);
             return false;
         } else {
+
             InstanceInfo instanceInfo = leaseToRenew.getHolder();
+            // 下面是一拖检查逻辑， 续约之前的操作。
+            // 这种代码都不抽出来，垃圾代码
             if (instanceInfo != null) {
                 // touchASGCache(instanceInfo.getASGName());
                 InstanceStatus overriddenInstanceStatus = this.getOverriddenInstanceStatus(
@@ -391,6 +405,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                 }
             }
             renewsLastMin.increment();
+            // 执行续约
             leaseToRenew.renew();
             return true;
         }
@@ -1332,6 +1347,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         return rule.apply(r, existingLease, isReplication).status();
     }
 
+    // 超过3分钟的实例，直接从队列中移除
     private TimerTask getDeltaRetentionTask() {
         return new TimerTask() {
 
