@@ -86,6 +86,7 @@ public class PeerEurekaNodes {
         );
         try {
             // 更新eureka集群信息，让eureka server 感知到所有其他的eureka-server集群节点的数据
+            // resolvePeerUrls(),从配置的defaultZone中拿到所有的额外的server地址
             updatePeerEurekaNodes(resolvePeerUrls());
             Runnable peersUpdateTask = new Runnable() {
                 @Override
@@ -98,7 +99,7 @@ public class PeerEurekaNodes {
 
                 }
             };
-            // 定时刷新eureka集群信息，默认是10分钟更新一次
+            // 定时刷新集群存活服务节点的url信息，默认是10分钟更新一次
             taskExecutor.scheduleWithFixedDelay(
                     peersUpdateTask,
                     serverConfig.getPeerEurekaNodesUpdateIntervalMs(),
@@ -179,6 +180,7 @@ public class PeerEurekaNodes {
                 PeerEurekaNode eurekaNode = newNodeList.get(i);
                 if (toShutdown.contains(eurekaNode.getServiceUrl())) {
                     newNodeList.remove(i);
+                    // 下线节点
                     eurekaNode.shutDown();
                 } else {
                     i++;

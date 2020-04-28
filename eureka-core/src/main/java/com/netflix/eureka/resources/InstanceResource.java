@@ -281,6 +281,7 @@ public class InstanceResource {
      *         failure.
      */
     @DELETE
+    // 服务下线
     public Response cancelLease(
             @HeaderParam(PeerEurekaNode.HEADER_REPLICATION) String isReplication) {
         boolean isSuccess = registry.cancel(app.getName(), id,

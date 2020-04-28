@@ -282,6 +282,7 @@ public class ResponseCacheImpl implements ResponseCache {
      *
      * @param keys the list of keys for which the cache information needs to be invalidated.
      */
+    // 过期指定keys的读写缓存
     public void invalidate(Key... keys) {
         for (Key key : keys) {
             logger.debug("Invalidating the response cache key : {} {} {} {}, {}",
