@@ -244,6 +244,7 @@ public class EurekaBootStrap implements ServletContextListener {
         // 第六步：处理善后事情，从集群任意一个eureka节点拷贝其注册表信息，作为当前实例的初始注册表数据
         int registryCount = registry.syncUp();
         // 启动自动故障感知定时任务。根据客户端的续约时间来自动判断是否故障，并作出下线处理。在执行故障感知之前会先进行自我保护机制判断
+        // registryCount--》从相邻服务端拷贝过来的实例数
         registry.openForTraffic(applicationInfoManager, registryCount);
 
         // Register all monitoring statistics.

@@ -196,6 +196,8 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
             // 灵活的运用读写锁，可以控制多线程的并发，有些操作是可以并发执行的，
             // 有些操作是互斥的。
             read.lock();
+            // 从registry中获取当前app的所有实例信息
+            // registry是所有服务实例的注册表，服务实例的注册，下线，故障等优先在registry中体现
             Map<String, Lease<InstanceInfo>> gMap = registry.get(registrant.getAppName());
             REGISTER.increment(isReplication);
             if (gMap == null) {

@@ -219,6 +219,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
                 }
             }
             Applications apps = eurekaClient.getApplications();
+            // 将拉取到的注册信息注册到当前节点
             for (Application app : apps.getRegisteredApplications()) {
                 for (InstanceInfo instance : app.getInstances()) {
                     try {
