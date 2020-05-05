@@ -187,6 +187,10 @@ public class ApplicationResource {
             }
         }
 
+        // isReplication表示：如果是该server是第一个接收到注册的节点，则isReplication是false
+        // 则会向其他server去注册。但是他复制给其他节点时，传过去的isReplication就是true，可以看代码
+        // 这样别人就不会继续给其他节点复制了。防止死循环。
+        // 这也是异步复制给其他所有节点的做法
         registry.register(info, "true".equals(isReplication));
         return Response.status(204).build();  // 204 to be backwards compatible
     }

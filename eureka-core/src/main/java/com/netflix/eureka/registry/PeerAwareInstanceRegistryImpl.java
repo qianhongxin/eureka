@@ -202,22 +202,29 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
      * operation fails over to other nodes until the list is exhausted if the
      * communication fails.
      *
-     * 从相邻的一个server节点拷贝注册表信息，如果拷贝失败，就找下一个
+     * 从相邻的一个server节点拷贝注册表信息，如果拷贝失败，就找下一个，试5次拉取
      */
     @Override
     public int syncUp() {
         // Copy entire entry from neighboring DS node
         int count = 0;
 
+        // 默认重试5次（getRegistrySyncRetries）
         for (int i = 0; ((i < serverConfig.getRegistrySyncRetries()) && (count == 0)); i++) {
             if (i > 0) {
                 try {
+                    // 如果eurekaClient.getApplications();拿到的是null，count就是0。就会走到这里
+                    // 尝试睡眠30s，等client拉取好。
+                    // 最多睡眠5次，如果5次还没有，就返回了
                     Thread.sleep(serverConfig.getRegistrySyncRetryWaitMs());
                 } catch (InterruptedException e) {
                     logger.warn("Interrupted during registry transfer..");
                     break;
                 }
             }
+            // 从本地缓存中获取拉取到的注册表信息。因为eureka server在启动的时候，就会让包含的client
+            // 去任意一个其他server节点去拉取数据放入localRegionApps，所以这里getApplications就从
+            // localRegionApps中获取。
             Applications apps = eurekaClient.getApplications();
             // 将拉取到的注册信息注册到当前节点
             for (Application app : apps.getRegisteredApplications()) {
@@ -239,23 +246,31 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
     @Override
     public void openForTraffic(ApplicationInfoManager applicationInfoManager, int count) {
         // Renewals happen every 30 seconds and for a minute it should be a factor of 2.
+        // 期望的每秒心跳数。这里是假设一秒2个心跳，然后乘2了。硬编码。
+        // 这个代码垃圾啊。如果我调整心跳时间为10s一次？那乘2就错了啊，
         this.expectedNumberOfRenewsPerMin = count * 2;
+        // 然后将expectedNumberOfRenewsPerMin*0.85得到最小的心跳数量
         this.numberOfRenewsPerMinThreshold =
                 (int) (this.expectedNumberOfRenewsPerMin * serverConfig.getRenewalPercentThreshold());
+
         logger.info("Got " + count + " instances from neighboring DS node");
         logger.info("Renew threshold is: " + numberOfRenewsPerMinThreshold);
+
         this.startupTime = System.currentTimeMillis();
         if (count > 0) {
             this.peerInstancesTransferEmptyOnStartup = false;
         }
+
         DataCenterInfo.Name selfName = applicationInfoManager.getInfo().getDataCenterInfo().getName();
         boolean isAws = Name.Amazon == selfName;
         if (isAws && serverConfig.shouldPrimeAwsReplicaConnections()) {
             logger.info("Priming AWS connections for all replicas..");
             primeAwsReplicas(applicationInfoManager);
         }
+
         logger.info("Changing status to UP");
         applicationInfoManager.setInstanceStatus(InstanceStatus.UP);
+
         // 启动自动故障感知调度任务，默认每隔 60s 跑一次
         super.postInit();
     }
@@ -383,6 +398,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
         if (super.cancel(appName, id, isReplication)) {
             replicateToPeers(Action.Cancel, appName, id, null, null, isReplication);
             synchronized (lock) {
+                // 新下线一个服务实力，每秒就该少2次心跳(就是垃圾，硬编码，凭什么你就断定1秒2次心跳？)
                 if (this.expectedNumberOfRenewsPerMin > 0) {
                     // Since the client wants to cancel it, reduce the threshold (1 for 30 seconds, 2 for a minute)
                     this.expectedNumberOfRenewsPerMin = this.expectedNumberOfRenewsPerMin - 2;
@@ -484,10 +500,18 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
 
     @Override
     public boolean isLeaseExpirationEnabled() {
+        // 是否启用了自我保护机制，这是我门配置的，默认是true，如果不配置的话
+        // 如果我配置为false，就会永远返回true
         if (!isSelfPreservationModeEnabled()) {
             // The self preservation mode is disabled, hence allowing the instances to expire.
             return true;
         }
+
+        // numberOfRenewsPerMinThreshold==》我期望的是1min有多少心跳发送过来   比如100
+        // getNumOfRenewsInLastMin()==》上1分钟所有服务实力一共发送过来多少心跳   比如102
+        // 如果上一分钟的心跳次数 > 我期望的心跳次数 就返回true，那么就可以执行服务实力剔除
+        // 如果上一分钟的心跳次数 < 我期望的心跳次数，返回false。执行自我保护机制，不让你剔除服务实例
+
         return numberOfRenewsPerMinThreshold > 0 && getNumOfRenewsInLastMin() > numberOfRenewsPerMinThreshold;
     }
 
@@ -583,6 +607,8 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
     @com.netflix.servo.annotations.Monitor(name = "isBelowRenewThreshold", description = "0 = false, 1 = true",
             type = com.netflix.servo.annotations.DataSourceType.GAUGE)
     @Override
+    // 用于head.jsp中显示那行红字的
+    // 这里是根据最后一分钟心跳次数和期望心跳次数的比值
     public int isBelowRenewThresold() {
         if ((getNumOfRenewsInLastMin() <= numberOfRenewsPerMinThreshold)
                 &&
@@ -623,19 +649,26 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
      */
     private void replicateToPeers(Action action, String appName, String id,
                                   InstanceInfo info /* optional */,
-                                  InstanceStatus newStatus /* optional */, boolean isReplication) {
+                                  InstanceStatus newStatus /* optional */,
+                                  boolean isReplication) {
         Stopwatch tracer = action.getTimer().start();
         try {
             if (isReplication) {
                 numberOfReplicationsLastMin.increment();
             }
             // If it is a replication already, do not replicate again as this will create a poison replication
+            // isReplication表示：如果是该server是第一个接收到注册的节点，则isReplication是false
+            // 则会向其他server去注册。但是他复制给其他节点时，传过去的isReplication就是true，可以看代码
+            // 这样别人就不会继续给其他节点复制了。防止死循环。
+            // 这也是异步复制给其他所有节点的做法
             if (peerEurekaNodes == Collections.EMPTY_LIST || isReplication) {
                 return;
             }
 
+            // 给我们配置的所有其他server节点同步配置
             for (final PeerEurekaNode node : peerEurekaNodes.getPeerEurekaNodes()) {
                 // If the url represents this host, do not replicate to yourself.
+                // 排除掉自己
                 if (peerEurekaNodes.isThisMyUrl(node.getServiceUrl())) {
                     continue;
                 }
@@ -651,6 +684,8 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
      * replication traffic to this node.
      *
      */
+    // 下线，心跳，注册，状态变更，删除等都会同步给其他server
+    // 三层队列批处理机制，同步这些变化信息到其他节点
     private void replicateInstanceActionsToPeers(Action action, String appName,
                                                  String id, InstanceInfo info, InstanceStatus newStatus,
                                                  PeerEurekaNode node) {

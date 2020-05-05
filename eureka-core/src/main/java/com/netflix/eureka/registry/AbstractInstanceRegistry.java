@@ -102,6 +102,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     private final AtomicReference<EvictionTask> evictionTaskRef = new AtomicReference<EvictionTask>();
 
     protected String[] allKnownRemoteRegions = EMPTY_STR_ARRAY;
+    // 我期望的是1min有多少心跳发送过来
     protected volatile int numberOfRenewsPerMinThreshold;
     protected volatile int expectedNumberOfRenewsPerMin;
 
@@ -230,7 +231,9 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                         // Since the client wants to cancel it, reduce the threshold
                         // (1
                         // for 30 seconds, 2 for a minute)
+                        // 新注册一个服务实力，每秒就该多2次心跳(就是垃圾，硬编码，凭什么你就断定1秒2次心跳？)
                         this.expectedNumberOfRenewsPerMin = this.expectedNumberOfRenewsPerMin + 2;
+                        // 将expectedNumberOfRenewsPerMin * 0.85
                         this.numberOfRenewsPerMinThreshold =
                                 (int) (this.expectedNumberOfRenewsPerMin * serverConfig.getRenewalPercentThreshold());
                     }
@@ -617,6 +620,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         logger.debug("Running the evict task");
 
         // 是否开启自我保护机制
+        // 这个跟自我保护机制有关系，在evict之前先判断
         if (!isLeaseExpirationEnabled()) {
             logger.debug("DS: lease expiration is currently disabled.");
             return;

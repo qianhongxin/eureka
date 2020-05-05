@@ -193,6 +193,7 @@ public class PeerEurekaNodes {
         if (!toAdd.isEmpty()) {
             logger.info("Adding new peer nodes {}", toAdd);
             for (String peerUrl : toAdd) {
+                // 创建PeerEurekaNode
                 newNodeList.add(createPeerEurekaNode(peerUrl));
             }
         }

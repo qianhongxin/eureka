@@ -1049,6 +1049,7 @@ public class DiscoveryClient implements EurekaClient {
      * @throws Throwable
      *             on error.
      */
+    // 从相邻的eureka server抓取全量注册表，并缓存到localRegionApps
     private void getAndStoreFullRegistry() throws Throwable {
         long currentUpdateGeneration = fetchRegistryGeneration.get();
 
@@ -1283,6 +1284,7 @@ public class DiscoveryClient implements EurekaClient {
                             registryFetchIntervalSeconds,
                             TimeUnit.SECONDS,
                             expBackOffBound,
+                            // 从相邻eureka server节点抓取注册表数据
                             new CacheRefreshThread()
                     ),
                     registryFetchIntervalSeconds, TimeUnit.SECONDS);

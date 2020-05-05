@@ -120,6 +120,7 @@ class AcceptorExecutor<ID, T> {
     }
 
     void process(ID id, T task, long expiryTime) {
+        // 将task放入acceptorQueue
         acceptorQueue.add(new TaskHolder<ID, T>(id, task, expiryTime));
         acceptedTasks++;
     }
@@ -192,6 +193,7 @@ class AcceptorExecutor<ID, T> {
                         scheduleTime = now + trafficShaper.transmissionDelay();
                     }
                     if (scheduleTime <= now) {
+                        // 批处理同步数据
                         assignBatchWork();
                         assignSingleItemWork();
                     }
@@ -307,6 +309,7 @@ class AcceptorExecutor<ID, T> {
                         batchWorkRequests.release();
                     } else {
                         batchSizeMetric.record(holders.size(), TimeUnit.MILLISECONDS);
+                        // 将holders放入批处理队列，下一步就是开始调用接口同步数据了
                         batchWorkQueue.add(holders);
                     }
                 }

@@ -214,6 +214,7 @@ public class EurekaBootStrap implements ServletContextListener {
         }
 
         // 第四步：处理peer节点相关的事情，代表了eureka server集群，包括了所有的eureka server 节点
+        // 代表了集eureka集群
         PeerEurekaNodes peerEurekaNodes = getPeerEurekaNodes(
                 registry,
                 eurekaServerConfig,

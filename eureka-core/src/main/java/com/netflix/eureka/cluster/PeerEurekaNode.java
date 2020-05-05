@@ -131,12 +131,15 @@ public class PeerEurekaNode {
      *            that is send to this instance.
      * @throws Exception
      */
+    // 任务批处理，多级队列机制同步
+    // 同步是异步的，所以eureka是AP架构
     public void register(final InstanceInfo info) throws Exception {
         long expiryTime = System.currentTimeMillis() + getLeaseRenewalOf(info);
         batchingDispatcher.process(
                 taskId("register", info),
                 new InstanceReplicationTask(targetHost, Action.Register, info, null, true) {
                     public EurekaHttpResponse<Void> execute() {
+                        // 异步执行执行注册
                         return replicationClient.register(info);
                     }
                 },
@@ -154,10 +157,12 @@ public class PeerEurekaNode {
      *            the unique identifier of the instance.
      * @throws Exception
      */
+    // 向相邻节点们调用取消注册接口
     public void cancel(final String appName, final String id) throws Exception {
         long expiryTime = System.currentTimeMillis() + maxProcessingDelayMs;
         batchingDispatcher.process(
                 taskId("cancel", appName, id),
+                // 封装成任务
                 new InstanceReplicationTask(targetHost, Action.Cancel, appName, id) {
                     @Override
                     public EurekaHttpResponse<Void> execute() {

@@ -107,9 +107,16 @@ public class Lease<T> {
      * instances that ungracefully shutdown. Due to possible wide ranging impact to existing usage, this will
      * not be fixed.
      *
+     *    *
      * @param additionalLeaseMs any additional lease time to add to the lease evaluation in ms.
      */
+    //这里有eureka  的bug，我们设置过期时间时间是90s，实际是90s+duration才会过期。即180s。还有只读缓存，读写缓存的更新时间，所以
+    // 实际上更慢一点，大于3min
+
+    // 闪光点：为了防止因为jvm的stop the world等导致延迟调度二导致的误判，加了补偿时间。但是也会导致新问题
     public boolean isExpired(long additionalLeaseMs) {
+        //lastUpdateTimestamp是心跳更新的时间，additionalLeaseMs是补偿时间，防止stop the world等导致的主动过期任务延迟调度导致的问题。但也会导致整体过期时间大于
+        // lastUpdateTimestamp + duration，即lastUpdateTimestamp + duration+ additionalLeaseMs·
         return (evictionTimestamp > 0 || System.currentTimeMillis() > (lastUpdateTimestamp + duration + additionalLeaseMs));
     }
 
