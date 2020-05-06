@@ -75,6 +75,8 @@ public class PeerEurekaNode {
 
     private final String serviceUrl;
     private final EurekaServerConfig config;
+    // cancel，heartbeat，register等方法对应的数据同步到对应节点的延迟时间。因为数据同步需要时间。这里定义出延迟的时间
+    // 如果同步失败再次同步时，可以和当前时间做比对
     private final long maxProcessingDelayMs;
     private final PeerAwareInstanceRegistry registry;
     private final String targetHost;
@@ -97,10 +99,12 @@ public class PeerEurekaNode {
 
         this.serviceUrl = serviceUrl;
         this.config = config;
+        // 拿到最大的数据同步延迟时间
         this.maxProcessingDelayMs = config.getMaxTimeForReplication();
 
         String batcherName = getBatcherName();
         ReplicationTaskProcessor taskProcessor = new ReplicationTaskProcessor(targetHost, replicationClient);
+        // 将cancel，heartbeat，register等方法对应的数据，批量同步到该节点
         this.batchingDispatcher = TaskDispatchers.createBatchingTaskDispatcher(
                 batcherName,
                 config.getMaxElementsInPeerReplicationPool(),
@@ -111,6 +115,7 @@ public class PeerEurekaNode {
                 retrySleepTimeMs,
                 taskProcessor
         );
+        // 将cancel，heartbeat，register等方法对应的数据，逐个同步到该节点
         this.nonBatchingDispatcher = TaskDispatchers.createNonBatchingTaskDispatcher(
                 targetHost,
                 config.getMaxElementsInStatusReplicationPool(),
@@ -134,6 +139,7 @@ public class PeerEurekaNode {
     // 任务批处理，多级队列机制同步
     // 同步是异步的，所以eureka是AP架构
     public void register(final InstanceInfo info) throws Exception {
+        // 续约延迟时间。因为将数据同步到其他节点是需要一定时间的。这个时间可以用于同步失败时再次同步时做一个判断
         long expiryTime = System.currentTimeMillis() + getLeaseRenewalOf(info);
         batchingDispatcher.process(
                 taskId("register", info),
@@ -273,6 +279,7 @@ public class PeerEurekaNode {
      */
     public void statusUpdate(final String appName, final String id,
                              final InstanceStatus newStatus, final InstanceInfo info) {
+        // 状态变更延迟时间。因为将数据同步到其他节点是需要一定时间的。这个时间可以用于同步失败时再次同步时做一个判断
         long expiryTime = System.currentTimeMillis() + maxProcessingDelayMs;
         batchingDispatcher.process(
                 taskId("statusUpdate", appName, id),

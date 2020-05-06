@@ -225,6 +225,7 @@ public class EurekaBootStrap implements ServletContextListener {
 
         // 第五步：完成eureka server服务上下文创建
         // 包含了当前eureka server需要的所有东西
+        // 后续的依赖注入需要的对象，都在这个serverContext中。没有spring，就需要自己处理
         serverContext = new DefaultEurekaServerContext(
                 eurekaServerConfig,
                 serverCodecs,

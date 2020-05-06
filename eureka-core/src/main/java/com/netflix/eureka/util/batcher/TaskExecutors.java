@@ -47,8 +47,10 @@ class TaskExecutors<ID, T> {
     }
 
     void shutdown() {
+        // 将 isShutdown 设置为 true
         if (isShutdown.compareAndSet(false, true)) {
             for (Thread workerThread : workerThreads) {
+                // 将线程从休眠等状态打断等，加快关闭
                 workerThread.interrupt();
             }
         }
@@ -144,9 +146,12 @@ class TaskExecutors<ID, T> {
 
     abstract static class WorkerRunnable<ID, T> implements Runnable {
         final String workerName;
+        // 是否关闭
         final AtomicBoolean isShutdown;
         final TaskExecutorMetrics metrics;
+        // 做数据同步的处理
         final TaskProcessor<T> processor;
+        // 接收数据的处理器
         final AcceptorExecutor<ID, T> taskDispatcher;
 
         WorkerRunnable(String workerName,
@@ -166,6 +171,7 @@ class TaskExecutors<ID, T> {
         }
     }
 
+    // 批量数据同步处理线程
     static class BatchWorkerRunnable<ID, T> extends WorkerRunnable<ID, T> {
 
         BatchWorkerRunnable(String workerName,
@@ -184,12 +190,14 @@ class TaskExecutors<ID, T> {
                     metrics.registerExpiryTimes(holders);
 
                     List<T> tasks = getTasksOf(holders);
+                    // 批量同步数据
                     ProcessingResult result = processor.process(tasks);
                     switch (result) {
                         case Success:
                             break;
                         case Congestion:
                         case TransientError:
+                            // 出错加入reProcessQueue
                             taskDispatcher.reprocess(holders, result);
                             break;
                         case PermanentError:
@@ -223,6 +231,7 @@ class TaskExecutors<ID, T> {
         }
     }
 
+    // 逐个数据同步处理线程
     static class SingleTaskWorkerRunnable<ID, T> extends WorkerRunnable<ID, T> {
 
         SingleTaskWorkerRunnable(String workerName,
@@ -246,12 +255,14 @@ class TaskExecutors<ID, T> {
                     }
                     metrics.registerExpiryTime(taskHolder);
                     if (taskHolder != null) {
+                        // 逐个同步数据
                         ProcessingResult result = processor.process(taskHolder.getTask());
                         switch (result) {
                             case Success:
                                 break;
                             case Congestion:
                             case TransientError:
+                                // 出错加入reProcessQueue
                                 taskDispatcher.reprocess(taskHolder, result);
                                 break;
                             case PermanentError:

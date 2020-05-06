@@ -53,13 +53,23 @@ class AcceptorExecutor<ID, T> {
 
     private final AtomicBoolean isShutdown = new AtomicBoolean(false);
 
+    // 存放注册，取消，心跳等的数据队列。线程安全的
     private final BlockingQueue<TaskHolder<ID, T>> acceptorQueue = new LinkedBlockingQueue<>();
+    // 存放同步失败的数据队列，线程安全的
     private final BlockingDeque<TaskHolder<ID, T>> reprocessQueue = new LinkedBlockingDeque<>();
+    // 处理注册，取消，心跳等的数据线程
     private final Thread acceptorThread;
 
+
+    // HashMap和LinkedList都不是线程安全的。这里可以使用是因为单线程操作的原因
+    // 存放待处理的数据
     private final Map<ID, TaskHolder<ID, T>> pendingTasks = new HashMap<>();
+    // 存放待处理的数据的id
     private final Deque<ID> processingOrder = new LinkedList<>();
 
+    // 逐个数据处理请求信号量。当SingleTaskWorkerRunnable从singleItemWorkQueue取出TaskHolder时，
+    // AcceptorRunner就可以放入TaskHolder到singleItemWorkQueue中
+    // 信号量本身可以做互斥锁，同步生产消费者速度等场景。这里做的是防止AcceptorRunner生产过快。
     private final Semaphore singleItemWorkRequests = new Semaphore(0);
     private final BlockingQueue<TaskHolder<ID, T>> singleItemWorkQueue = new LinkedBlockingQueue<>();
 
@@ -72,6 +82,7 @@ class AcceptorExecutor<ID, T> {
      * Metrics
      */
     @Monitor(name = METRIC_REPLICATION_PREFIX + "acceptedTasks", description = "Number of accepted tasks", type = DataSourceType.COUNTER)
+    // 已接受的任务数量
     volatile long acceptedTasks;
 
     @Monitor(name = METRIC_REPLICATION_PREFIX + "replayedTasks", description = "Number of replayedTasks tasks", type = DataSourceType.COUNTER)
@@ -184,6 +195,7 @@ class AcceptorExecutor<ID, T> {
             long scheduleTime = 0;
             while (!isShutdown.get()) {
                 try {
+                    // 将数据加入processingOrder
                     drainInputQueues();
 
                     int totalItems = processingOrder.size();
@@ -193,13 +205,17 @@ class AcceptorExecutor<ID, T> {
                         scheduleTime = now + trafficShaper.transmissionDelay();
                     }
                     if (scheduleTime <= now) {
-                        // 批处理同步数据
+                        // 以下两部保证数据都被封装完毕
+
+                        // 封装批处理同步数据
                         assignBatchWork();
+                        // 封装逐个处理同步数据
                         assignSingleItemWork();
                     }
 
                     // If no worker is requesting data or there is a delay injected by the traffic shaper,
                     // sleep for some time to avoid tight loop.
+                    // 如果assignBatchWork和assignSingleItemWork没有线程处理数据，这里休眠10毫秒。防止cpu空转，消耗cpu
                     if (totalItems == processingOrder.size()) {
                         Thread.sleep(10);
                     }
@@ -218,12 +234,16 @@ class AcceptorExecutor<ID, T> {
 
         private void drainInputQueues() throws InterruptedException {
             do {
+                // 将上次同步失败的数据重新同步
                 drainReprocessQueue();
+                // 将新接受的acceptorQueue中的数据做同步
                 drainAcceptorQueue();
 
+                // 继续将acceptorQueue中新产生的数据加入processingOrder
                 if (!isShutdown.get()) {
                     // If all queues are empty, block for a while on the acceptor queue
                     if (reprocessQueue.isEmpty() && acceptorQueue.isEmpty() && pendingTasks.isEmpty()) {
+                        // 从acceptorQueue中出队数据
                         TaskHolder<ID, T> taskHolder = acceptorQueue.poll(10, TimeUnit.MILLISECONDS);
                         if (taskHolder != null) {
                             appendTaskHolder(taskHolder);
@@ -244,6 +264,7 @@ class AcceptorExecutor<ID, T> {
             while (!reprocessQueue.isEmpty() && !isFull()) {
                 TaskHolder<ID, T> taskHolder = reprocessQueue.pollLast();
                 ID id = taskHolder.getId();
+                // 判断数据是否过期
                 if (taskHolder.getExpiryTime() <= now) {
                     expiredTasks++;
                 } else if (pendingTasks.containsKey(id)) {
@@ -264,7 +285,9 @@ class AcceptorExecutor<ID, T> {
                 pendingTasks.remove(processingOrder.poll());
                 queueOverflows++;
             }
+            // Map的put方法返回的是key的旧值。如果旧值不存在，则返回的是null
             TaskHolder<ID, T> previousTask = pendingTasks.put(taskHolder.getId(), taskHolder);
+            // taskHolder放入pendingTasks成功后，再将id放入processingOrder
             if (previousTask == null) {
                 processingOrder.add(taskHolder.getId());
             } else {
@@ -298,6 +321,7 @@ class AcceptorExecutor<ID, T> {
                     List<TaskHolder<ID, T>> holders = new ArrayList<>(len);
                     while (holders.size() < len && !processingOrder.isEmpty()) {
                         ID id = processingOrder.poll();
+                        // Map删除后，返回这个key的旧值
                         TaskHolder<ID, T> holder = pendingTasks.remove(id);
                         if (holder.getExpiryTime() > now) {
                             holders.add(holder);

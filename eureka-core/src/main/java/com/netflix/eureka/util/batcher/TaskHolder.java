@@ -7,7 +7,9 @@ class TaskHolder<ID, T> {
 
     private final ID id;
     private final T task;
+    // 数据过期时间
     private final long expiryTime;
+    // 数据提交时间
     private final long submitTimestamp;
 
     TaskHolder(ID id, T task, long expiryTime) {

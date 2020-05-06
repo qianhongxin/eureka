@@ -14,9 +14,11 @@ public class TaskDispatchers {
                                                                                 long congestionRetryDelayMs,
                                                                                 long networkFailureRetryMs,
                                                                                 TaskProcessor<T> taskProcessor) {
+        // 接受cancel，register，heartbeat等的数据写入入口
         final AcceptorExecutor<ID, T> acceptorExecutor = new AcceptorExecutor<>(
                 id, maxBufferSize, 1, maxBatchingDelay, congestionRetryDelayMs, networkFailureRetryMs
         );
+        // 将AcceptorExecutor接受的数据，逐个同步到对应的集群节点
         final TaskExecutors<ID, T> taskExecutor = TaskExecutors.singleItemExecutors(id, workerCount, taskProcessor, acceptorExecutor);
         return new TaskDispatcher<ID, T>() {
             @Override
@@ -40,9 +42,11 @@ public class TaskDispatchers {
                                                                              long congestionRetryDelayMs,
                                                                              long networkFailureRetryMs,
                                                                              TaskProcessor<T> taskProcessor) {
+        // 接受cancel，register，heartbeat等的数据写入入口
         final AcceptorExecutor<ID, T> acceptorExecutor = new AcceptorExecutor<>(
                 id, maxBufferSize, workloadSize, maxBatchingDelay, congestionRetryDelayMs, networkFailureRetryMs
         );
+        // 将AcceptorExecutor接受的数据，批量同步到对应的集群节点
         final TaskExecutors<ID, T> taskExecutor = TaskExecutors.batchExecutors(id, workerCount, taskProcessor, acceptorExecutor);
         return new TaskDispatcher<ID, T>() {
             @Override
