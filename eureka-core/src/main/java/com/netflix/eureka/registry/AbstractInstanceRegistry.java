@@ -77,6 +77,20 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
 
     private static final String[] EMPTY_STR_ARRAY = new String[0];
     // 用ConcurrentHashMap<String, Map<String, Lease<InstanceInfo>>>做服务实例的注册表
+    // {
+    //              serviceName1: {
+    //                 instanceId1: instanceInfo1,
+    //                 instanceId2: instanceInfo2,
+    //                 instanceId3: instanceInfo3,
+    //                 instanceId4: instanceInfo4
+    //              };
+    //              serviceName2: {
+    //                 instanceId5: instanceInfo5,
+    //                 instanceId6: instanceInfo6,
+    //                 instanceId7: instanceInfo7,
+    //                 instanceId8: instanceInfo8
+    //              };
+    // }
     private final ConcurrentHashMap<String, Map<String, Lease<InstanceInfo>>> registry
             = new ConcurrentHashMap<String, Map<String, Lease<InstanceInfo>>>();
     protected Map<String, RemoteRegionRegistry> regionNameVSRemoteRegistry = new HashMap<String, RemoteRegionRegistry>();
@@ -86,19 +100,29 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
             .<String, InstanceStatus>build().asMap();
 
     // CircularQueues here for debugging/statistics purposes only
+    // register发生时会加入该队列
     private final CircularQueue<Pair<Long, String>> recentRegisteredQueue;
+    // cancel发生时会加入该队列
     private final CircularQueue<Pair<Long, String>> recentCanceledQueue;
+    // 当cancel，register，statusUpdate，deleteStatusOverride发生时都会更新该队列
     private ConcurrentLinkedQueue<RecentlyChangedItem> recentlyChangedQueue = new ConcurrentLinkedQueue<RecentlyChangedItem>();
 
+    // 读写锁用于
     private final ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock();
+    // 当cancel，register，statusUpdate，deleteStatusOverride发生时，并发生可以同时进行，不用互斥。但是不允许抓取注册表数据
     private final Lock read = readWriteLock.readLock();
+    // 用于抓取注册表数据时，不允许更新操作发生，即cancel，register，statusUpdate，deleteStatusOverride不允许操作
     private final Lock write = readWriteLock.writeLock();
+    // 用于并发更新期望心跳时间的互斥锁
     protected final Object lock = new Object();
 
-    private Timer deltaRetentionTimer = new Timer("Eureka-DeltaRetentionTimer", true);
-    private Timer evictionTimer = new Timer("Eureka-EvictionTimer", true);
-    private final MeasuredRate renewsLastMin;
 
+    private Timer deltaRetentionTimer = new Timer("Eureka-DeltaRetentionTimer", true);
+    // 自我保护机制的定时器
+    private Timer evictionTimer = new Timer("Eureka-EvictionTimer", true);
+    // 计算最近x分钟内的心跳次数的定时任务的多长时间执行一次
+    private final MeasuredRate renewsLastMin;
+    // 自我保护机制任务
     private final AtomicReference<EvictionTask> evictionTaskRef = new AtomicReference<EvictionTask>();
 
     protected String[] allKnownRemoteRegions = EMPTY_STR_ARRAY;
@@ -121,6 +145,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         this.recentCanceledQueue = new CircularQueue<Pair<Long, String>>(1000);
         this.recentRegisteredQueue = new CircularQueue<Pair<Long, String>>(1000);
 
+        // 统计x分钟内的心跳数的任务
         this.renewsLastMin = new MeasuredRate(1000 * 60 * 1);
 
         this.deltaRetentionTimer.schedule(getDeltaRetentionTask(),
@@ -225,7 +250,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                 }
             } else {
                 // The lease does not exist and hence it is a new registration
-                // 租约不存在，因此是新的注册
+                // 租约不存在，因此是新的注册。所有对期望心跳的更新都加互斥锁了
                 synchronized (lock) {
                     if (this.expectedNumberOfRenewsPerMin > 0) {
                         // Since the client wants to cancel it, reduce the threshold
@@ -240,8 +265,10 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                 }
                 logger.debug("No previous lease information found; it is new registration");
             }
+            // 因为是注册，创建节点信息Lease<InstanceInfo>
             Lease<InstanceInfo> lease = new Lease<InstanceInfo>(registrant, leaseDuration);
             if (existingLease != null) {
+                //启动时间设置为已存在的启动时间
                 lease.setServiceUpTimestamp(existingLease.getServiceUpTimestamp());
             }
             // 更新实例信息
@@ -281,6 +308,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
             recentlyChangedQueue.add(new RecentlyChangedItem(lease));
             // 设置节点最后更新时间
             registrant.setLastUpdatedTimestamp();
+            // 过期appName（比如serviceA）的读写缓存，只读缓存通过定时任务更新
             invalidateCache(registrant.getAppName(), registrant.getVIPAddress(), registrant.getSecureVipAddress());
             logger.info("Registered instance {}/{} with status {} (replication={})",
                     registrant.getAppName(), registrant.getId(), registrant.getStatus(), isReplication);
@@ -339,7 +367,8 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                 logger.warn("DS: Registry: cancel failed because Lease is not registered for: {}/{}", appName, id);
                 return false;
             } else {
-                // 核心方法
+                // 核心方法，设置服务下线时间戳：evictionTimestamp
+                // 就是服务实例被清理掉，服务实例下线的时间戳
                 leaseToCancel.cancel();
 
                 InstanceInfo instanceInfo = leaseToCancel.getHolder();
@@ -347,7 +376,8 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                 String svip = null;
                 if (instanceInfo != null) {
                     instanceInfo.setActionType(ActionType.DELETED);
-                    // 将服务实例放入最新更新队列中（服务注册，故障也会放入这个队列）
+                    // 将服务实例放入最新更新队列中（服务注册，故障也会放入这个队列）。
+                    // 下次client拉取增量注册表时，会拉到这个数据
                     recentlyChangedQueue.add(new RecentlyChangedItem(leaseToCancel));
                     instanceInfo.setLastUpdatedTimestamp();
                     vip = instanceInfo.getVIPAddress();
@@ -612,6 +642,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         evict(0l);
     }
 
+    // 自我保护机制核心处理逻辑
     // 定时执行，自动故障感知剔除算法
 
     // 不会一次性将所有故障的服务实例都摘除，每次最多讲注册表中15%的服务实例给摘除掉，所以一次没摘除所有的故障实例，下次EvictionTask        再次执行的时候，会再次摘除，分批摘取机制
@@ -1236,6 +1267,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         return list;
     }
 
+    // 当cancel，register，statusUpdate，deleteStatusOverride发生时,都会过期appName对应的读写缓存
     private void invalidateCache(String appName, @Nullable String vipAddress, @Nullable String secureVipAddress) {
         // invalidate cache
         responseCache.invalidate(appName, vipAddress, secureVipAddress);
@@ -1260,13 +1292,21 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     }
 
     protected void postInit() {
+        // 启动 自动计算最近x分钟内的心跳数任务，每分钟运行一次
         renewsLastMin.start();
         if (evictionTaskRef.get() != null) {
+            // 清空旧的自我保护逻辑
             evictionTaskRef.get().cancel();
         }
+        // 设置自我保护逻辑
         evictionTaskRef.set(new EvictionTask());
-        evictionTimer.schedule(evictionTaskRef.get(),
+        // 启动自我保护机制定时任务
+        evictionTimer.schedule(
+                // 自我保护逻辑
+                evictionTaskRef.get(),
+                // 60s后开始执行一次自我保护逻辑计算
                 serverConfig.getEvictionIntervalTimerInMs(),
+                // 每隔60s运行一次自我保护逻辑计算
                 serverConfig.getEvictionIntervalTimerInMs());
     }
 
@@ -1275,8 +1315,11 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
      */
     @Override
     public void shutdown() {
+
         deltaRetentionTimer.cancel();
+        // 结束自我保护机制判断的定时任务
         evictionTimer.cancel();
+        // 结束统计最近x分钟内的心跳次数的定时任务
         renewsLastMin.stop();
     }
 

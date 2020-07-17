@@ -205,11 +205,13 @@ public class PeerEurekaNode {
     public void heartbeat(final String appName, final String id,
                           final InstanceInfo info, final InstanceStatus overriddenStatus,
                           boolean primeConnection) throws Throwable {
+        // 是否初次连接，是则直接通过replicationClient发送心跳请求
         if (primeConnection) {
             // We do not care about the result for priming request.
             replicationClient.sendHeartBeat(appName, id, info, overriddenStatus);
             return;
         }
+        // 否，直接走三层队列任务批出来机制同步心跳数据
         ReplicationTask replicationTask = new InstanceReplicationTask(targetHost, Action.Heartbeat, info, overriddenStatus, false) {
             @Override
             public EurekaHttpResponse<InstanceInfo> execute() throws Throwable {

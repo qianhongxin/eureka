@@ -246,6 +246,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
     @Override
     public void openForTraffic(ApplicationInfoManager applicationInfoManager, int count) {
         // Renewals happen every 30 seconds and for a minute it should be a factor of 2.
+        // count是当前节点从别的节点拿到的实例总数
         // 期望的每秒心跳数。这里是假设一秒2个心跳，然后乘2了。硬编码。
         // 这个代码垃圾啊。如果我调整心跳时间为10s一次？那乘2就错了啊，
         this.expectedNumberOfRenewsPerMin = count * 2;
@@ -396,6 +397,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
                           final boolean isReplication) {
         // 调用父类的服务下线方法
         if (super.cancel(appName, id, isReplication)) {
+            // 通知集群其他节点，该实例下线
             replicateToPeers(Action.Cancel, appName, id, null, null, isReplication);
             synchronized (lock) {
                 // 新下线一个服务实力，每秒就该少2次心跳(就是垃圾，硬编码，凭什么你就断定1秒2次心跳？)
@@ -440,7 +442,9 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
      * java.lang.String, long, boolean)
      */
     public boolean renew(final String appName, final String id, final boolean isReplication) {
+        // 调用父类renew方法完成当前节点中的续约
         if (super.renew(appName, id, isReplication)) {
+            // 同步续约即心跳数据到集群其他节点
             replicateToPeers(Action.Heartbeat, appName, id, null, null, isReplication);
             return true;
         }

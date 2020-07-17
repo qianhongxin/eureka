@@ -140,7 +140,7 @@ public class ResponseCacheImpl implements ResponseCache {
         long responseCacheUpdateIntervalMs = serverConfig.getResponseCacheUpdateIntervalMs();
         this.readWriteCacheMap =
                 CacheBuilder.newBuilder().initialCapacity(1000)
-                        // 180s定时过期读写缓存
+                        // 180s后定时过期读写缓存
                         .expireAfterWrite(serverConfig.getResponseCacheAutoExpirationInSeconds(), TimeUnit.SECONDS)
                         .removalListener(new RemovalListener<Key, Value>() {
                             @Override
@@ -167,9 +167,13 @@ public class ResponseCacheImpl implements ResponseCache {
         if (shouldUseReadOnlyResponseCache) {
             // 被动过期 readOnlyCacheMap，默认30s执行一次。
             // 所以当一个实例下线了，readWriteCacheMap会实时感知到，但最多30s readOnlyCacheMap会感知到
-            timer.schedule(getCacheUpdateTask(),
+            timer.schedule(
+                    // 任务
+                    getCacheUpdateTask(),
+                    // 第一次执行时间
                     new Date(((System.currentTimeMillis() / responseCacheUpdateIntervalMs) * responseCacheUpdateIntervalMs)
                             + responseCacheUpdateIntervalMs),
+                    // 30s
                     responseCacheUpdateIntervalMs);
         }
 
@@ -180,6 +184,7 @@ public class ResponseCacheImpl implements ResponseCache {
         }
     }
 
+    // 定时任务，每隔30秒遍历只读缓存key，将读写缓存中的数据更新到只读缓存
     private TimerTask getCacheUpdateTask() {
         return new TimerTask() {
             @Override
@@ -288,6 +293,7 @@ public class ResponseCacheImpl implements ResponseCache {
             logger.debug("Invalidating the response cache key : {} {} {} {}, {}",
                     key.getEntityType(), key.getName(), key.getVersion(), key.getType(), key.getEurekaAccept());
 
+            // 过期key对应的读写缓存
             readWriteCacheMap.invalidate(key);
             Collection<Key> keysWithRegions = regionSpecificKeys.get(key);
             if (null != keysWithRegions && !keysWithRegions.isEmpty()) {

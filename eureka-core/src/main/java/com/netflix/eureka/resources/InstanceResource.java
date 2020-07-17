@@ -105,7 +105,7 @@ public class InstanceResource {
      *         failure.
      */
     @PUT
-    // 接受客户端的续约请求
+    // 接受客户端的续约请求，即心跳请求
     public Response renewLease(
             @HeaderParam(PeerEurekaNode.HEADER_REPLICATION) String isReplication,
             @QueryParam("overriddenstatus") String overriddenStatus,
@@ -159,6 +159,7 @@ public class InstanceResource {
      * @return response indicating whether the operation was a success or
      *         failure.
      */
+    // 用于手动更新节点状态，便于管理目的，方便运维
     @PUT
     @Path("status")
     public Response statusUpdate(
