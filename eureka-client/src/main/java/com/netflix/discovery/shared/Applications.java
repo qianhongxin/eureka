@@ -246,8 +246,11 @@ public class Applications {
      */
     @JsonIgnore
     public String getReconcileHashCode() {
+        // key是实例的name，value是实例数
         TreeMap<String, AtomicInteger> instanceCountMap = new TreeMap<String, AtomicInteger>();
+        // 根据本地的注册表，初始化instanceCountMap
         populateInstanceCountMap(instanceCountMap);
+        // 构造出的hashcode：name_value_name_value_name_value_name_value_.....
         return getReconcileHashCode(instanceCountMap);
     }
 
@@ -257,13 +260,18 @@ public class Applications {
      * @param instanceCountMap the map to populate
      */
     public void populateInstanceCountMap(TreeMap<String, AtomicInteger> instanceCountMap) {
+        // 遍历所有的applications
         for (Application app : this.getRegisteredApplications()) {
+            // 遍历application下的所有的instances
             for (InstanceInfo info : app.getInstancesAsIsFromEureka()) {
+                // 获取服务名对应的实例数
                 AtomicInteger instanceCount = instanceCountMap.get(info.getStatus().name());
+                // 如果服务实例数为null，则设置初始值0
                 if (instanceCount == null) {
                     instanceCount = new AtomicInteger(0);
                     instanceCountMap.put(info.getStatus().name(), instanceCount);
                 }
+                // 实例数量自增
                 instanceCount.incrementAndGet();
             }
         }
@@ -277,6 +285,9 @@ public class Applications {
      */
     public static String getReconcileHashCode(TreeMap<String, AtomicInteger> instanceCountMap) {
         String reconcileHashCode = "";
+        // 遍历instanceCountMap
+        // 每个实例构造成：name_value_
+        // 最终的reconcileHashCode：name_value_name_value_name_value_name_value_.....
         for (Map.Entry<String, AtomicInteger> mapEntry : instanceCountMap.entrySet()) {
             reconcileHashCode = reconcileHashCode + mapEntry.getKey()
                     + STATUS_DELIMITER + mapEntry.getValue().get()

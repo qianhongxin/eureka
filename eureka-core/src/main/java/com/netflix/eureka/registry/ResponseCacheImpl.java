@@ -138,10 +138,12 @@ public class ResponseCacheImpl implements ResponseCache {
 
         //默认30s
         long responseCacheUpdateIntervalMs = serverConfig.getResponseCacheUpdateIntervalMs();
+        // 每次写操作发生时都会过期 readWriteCacheMap 数据
         this.readWriteCacheMap =
                 CacheBuilder.newBuilder().initialCapacity(1000)
                         // 180s后定时过期读写缓存
                         .expireAfterWrite(serverConfig.getResponseCacheAutoExpirationInSeconds(), TimeUnit.SECONDS)
+                        // 缓存移除的时候会调用这个监听器
                         .removalListener(new RemovalListener<Key, Value>() {
                             @Override
                             public void onRemoval(RemovalNotification<Key, Value> notification) {
@@ -152,6 +154,14 @@ public class ResponseCacheImpl implements ResponseCache {
                                 }
                             }
                         })
+                        // LoadingCache是Cache的子接口，相比较于Cache，当从LoadingCache中读取一个指定key的记录时，
+                        // 如果该记录不存在，则LoadingCache可以自动执行加载数据到缓存的操作。
+                        //
+                        //与构建Cache类型的对象类似，LoadingCache类型的对象也是通过CacheBuilder进行构建，不同的是，
+                        // 在调用CacheBuilder的build方法时，必须传递一个CacheLoader类型的参数，CacheLoader的load方
+                        // 法需要我们提供实现。当调用LoadingCache的get方法时，如果缓存不存在对应key的记录，则CacheLoader
+                        // 中的load方法会被自动调用从外存加载数据，load方法的返回值会作为key对应的value存储到LoadingCache
+                        // 中，并从get方法返回。
                         .build(new CacheLoader<Key, Value>() {
                             @Override
                             public Value load(Key key) throws Exception {
@@ -184,6 +194,7 @@ public class ResponseCacheImpl implements ResponseCache {
         }
     }
 
+    // 利用读写缓存数据刷新只读缓存数据
     // 定时任务，每隔30秒遍历只读缓存key，将读写缓存中的数据更新到只读缓存
     private TimerTask getCacheUpdateTask() {
         return new TimerTask() {
@@ -200,6 +211,7 @@ public class ResponseCacheImpl implements ResponseCache {
                         Value cacheValue = readWriteCacheMap.get(key);
                         Value currentCacheValue = readOnlyCacheMap.get(key);
                         // Value被创建后就不允许改变，所以可以这样比较
+                        // 如果cacheValue为null。这里对应的key会被设置成null
                         if (cacheValue != currentCacheValue) {
                             readOnlyCacheMap.put(key, cacheValue);
                         }
@@ -434,7 +446,7 @@ public class ResponseCacheImpl implements ResponseCache {
             switch (key.getEntityType()) {
                 case Application:
                     boolean isRemoteRegionRequested = key.hasRegions();
-
+                    // 返回全量数据，即registry中的数据
                     if (ALL_APPS.equals(key.getName())) {
                         if (isRemoteRegionRequested) {
                             tracer = serializeAllAppsWithRemoteRegionTimer.start();
@@ -443,6 +455,7 @@ public class ResponseCacheImpl implements ResponseCache {
                             tracer = serializeAllAppsTimer.start();
                             payload = getPayLoad(key, registry.getApplications());
                         }
+                    // 获取增量注册表，返回recentlyChangedQueue中的数据即可
                     } else if (ALL_APPS_DELTA.equals(key.getName())) {
                         if (isRemoteRegionRequested) {
                             tracer = serializeDeltaAppsWithRemoteRegionTimer.start();
@@ -456,6 +469,7 @@ public class ResponseCacheImpl implements ResponseCache {
                             versionDeltaLegacy.incrementAndGet();
                             payload = getPayLoad(key, registry.getApplicationDeltas());
                         }
+                    // 返回空
                     } else {
                         tracer = serializeOneApptimer.start();
                         payload = getPayLoad(key, registry.getApplication(key.getName()));

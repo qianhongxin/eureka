@@ -149,6 +149,7 @@ public class RemoteRegionRegistry implements LookupService<String> {
 
         applications.set(new Applications());
         try {
+            // 初始化时，抓取注册表
             if (fetchRegistry()) {
                 this.readyForServingData = true;
             } else {
@@ -160,6 +161,7 @@ public class RemoteRegionRegistry implements LookupService<String> {
         }
 
         // remote region fetch
+        // 从server端抓取注册表
         Runnable remoteRegionFetchTask = new Runnable() {
             @Override
             public void run() {
@@ -186,11 +188,13 @@ public class RemoteRegionRegistry implements LookupService<String> {
                         .setDaemon(true)
                         .build());
 
+        // 每隔30s定时抓取server的注册表
         scheduler.schedule(
                 new TimedSupervisorTask(
                         "RemoteRegionFetch_" + regionName,
                         scheduler,
                         remoteRegionFetchExecutor,
+                        // 30s
                         serverConfig.getRemoteRegionRegistryFetchInterval(),
                         TimeUnit.SECONDS,
                         5,  // exponential backoff bound
@@ -257,10 +261,16 @@ public class RemoteRegionRegistry implements LookupService<String> {
                     + "safe. Hence got the full registry.");
             return storeFullRegistry();
         } else {
+            // 更新本地注册表
             updateDelta(delta);
+            // 生成本地的注册表数据的hash值版本号
+            // 构造出的hashcode：name_value_name_value_name_value_name_value_.....
             String reconcileHashCode = getApplications().getReconcileHashCode();
             // There is a diff in number of instances for some reason
+            // delta.getAppsHashCode()是服务端返回的注册表数据的hash值版本号
+            // 一致性hash版本比对。如果相等就跳过，否则抓取远程全量注册表
             if ((!reconcileHashCode.equals(delta.getAppsHashCode()))) {
+                // 抓取远程全量注册表
                 return reconcileAndLogDifference(delta, reconcileHashCode);
             }
         }
@@ -414,6 +424,7 @@ public class RemoteRegionRegistry implements LookupService<String> {
         logger.warn("The Reconcile hashcodes do not match, client : {}, server : {}. Getting the full registry",
                 reconcileHashCode, delta.getAppsHashCode());
 
+        // 抓取全量注册表
         Applications serverApps = this.fetchRemoteRegistry(false);
 
         Map<String, List<String>> reconcileDiffMap = getApplications().getReconcileMapDiff(serverApps);

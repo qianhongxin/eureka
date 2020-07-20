@@ -100,18 +100,28 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
             .<String, InstanceStatus>build().asMap();
 
     // CircularQueues here for debugging/statistics purposes only
-    // register发生时会加入该队列
+    // register发生时会加入该队列，存放最近注册的节点，默认存储最近1000个注册的节点，满了会删除
     private final CircularQueue<Pair<Long, String>> recentRegisteredQueue;
-    // cancel发生时会加入该队列
+    // cancel发生时会加入该队列，存放最近取消的节点，默认存储最近1000个注册的节点，满了会删除
     private final CircularQueue<Pair<Long, String>> recentCanceledQueue;
-    // 当cancel，register，statusUpdate，deleteStatusOverride发生时都会更新该队列
+
+    // 当cancel，register，statusUpdate，deleteStatusOverride 发生时都会更新该队列
+
+    // 增量数据的设计思路：如果你要保存一份增量的最新变更数据，可以基于LinkedQuueue，
+    // 将最新变更的数据放入这个queue中，然后后台来一个定时任务，每隔一定时间，将在队列中存放超过一
+    // 定时间的数据拿掉，保持这个队列中就是最近几分钟内的变更的增量数据（1）增量数据的设计思路：如果
+    // 你要保存一份增量的最新变更数据，可以基于LinkedQuueue，将最新变更的数据放入这个queue中，然后后
+    // 台来一个定时任务，每隔一定时间，将在队列中存放超过一定时间的数据拿掉，保持这个队列中就是最近几分
+    // 钟内的变更的增量数据
     private ConcurrentLinkedQueue<RecentlyChangedItem> recentlyChangedQueue = new ConcurrentLinkedQueue<RecentlyChangedItem>();
 
     // 读写锁用于
     private final ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock();
-    // 当cancel，register，statusUpdate，deleteStatusOverride发生时，并发生可以同时进行，不用互斥。但是不允许抓取注册表数据
+    // 当cancel，register，statusUpdate，deleteStatusOverride发生时，并发生可以同时进行，
+    // 不用互斥。但是不允许抓取注册表数据
     private final Lock read = readWriteLock.readLock();
-    // 用于抓取注册表数据时，不允许更新操作发生，即cancel，register，statusUpdate，deleteStatusOverride不允许操作
+    // 用于抓取注册表数据时，不允许更新操作发生，即cancel，register，statusUpdate，deleteStatusOverride
+    // 不允许操作
     private final Lock write = readWriteLock.writeLock();
     // 用于并发更新期望心跳时间的互斥锁
     protected final Object lock = new Object();
@@ -250,7 +260,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                 }
             } else {
                 // The lease does not exist and hence it is a new registration
-                // 租约不存在，因此是新的注册。所有对期望心跳的更新都加互斥锁了
+                // 租约不存在，因此是新的注册。所有对期望心跳的更新都加互斥锁了,保证原子性
                 synchronized (lock) {
                     if (this.expectedNumberOfRenewsPerMin > 0) {
                         // Since the client wants to cancel it, reduce the threshold
@@ -274,7 +284,10 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
             // 更新实例信息
             gMap.put(registrant.getId(), lease);
             // 加入最近注册队列
-            // 用synchronized保证recentRegisteredQueue对象及其属性的可见性，方法的原子性
+            // recentRegisteredQueue 是 CircularQueue 类型，CircularQueue的方法是线程不安全的，虽然父类是线程安全的。
+            // 所以这里加synchronized保证线程安全，即保证可见性，有序性，原子性
+            // 同时，因为这里加了synchronized，System.currentTimeMillis()对于每次操作都不同，所以所有节点可能同是执行这个 操作
+            // 但是时间会是不同的
             synchronized (recentRegisteredQueue) {
                 recentRegisteredQueue.add(new Pair<Long, String>(
                         System.currentTimeMillis(),
@@ -354,6 +367,10 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
             if (gMap != null) {
                 leaseToCancel = gMap.remove(id);
             }
+            // recentCanceledQueue是 CircularQueue 类型，CircularQueue的方法是线程不安全的，虽然父类是线程安全的。
+            // 所以这里加synchronized保证线程安全，即保证可见性，有序性，原子性
+            // 同时，因为这里加了synchronized，System.currentTimeMillis()对于每次操作都不同，所以所有节点可能同是执行这个 操作
+            // 但是时间会是不同的
             synchronized (recentCanceledQueue) {
                 // 加入最近下线的队列
                 recentCanceledQueue.add(new Pair<Long, String>(System.currentTimeMillis(), appName + "(" + id + ")"));
@@ -383,7 +400,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                     vip = instanceInfo.getVIPAddress();
                     svip = instanceInfo.getSecureVipAddress();
                 }
-                // 过期注册表缓存
+                // 过期注册表读写缓存
                 invalidateCache(appName, vip, svip);
                 logger.info("Cancelled instance {}/{} (replication={})", appName, id, isReplication);
                 return true;
@@ -803,6 +820,11 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
      * @return The applications with instances from the passed remote regions as well as local region. The instances
      * from remote regions can be only for certain whitelisted apps as explained above.
      */
+    // 返回全量注册数据，即registry中的数据
+    // 这里从registry中拉取数据，就没有加write锁，因为一般都是系统启动时拉取全量数据多，高并发拉取。
+    // 这时很少说840行和886行的数据不一致，即使不一致，也就只会一部分client下次增量拉取比对hashcode失败，
+    // 然后从新全量拉取一次。
+    // 所以这里牺牲一致性，换的是可用性即高性能
     public Applications getApplicationsFromMultipleRegions(String[] remoteRegions) {
 
         boolean includeRemoteRegion = null != remoteRegions && remoteRegions.length != 0;
@@ -862,6 +884,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                 }
             }
         }
+        // 生成hashcode，返回个client
         apps.setAppsHashCode(apps.getReconcileHashCode());
         return apps;
     }
@@ -946,6 +969,13 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         apps.setVersion(responseCache.getVersionDelta().get());
         Map<String, Application> applicationInstancesMap = new HashMap<String, Application>();
         try {
+            // 加写锁，读的同时不能对注册中心的各个队列和registry做写操作
+            // 原因：如果这里不加互斥锁，967-987行执行完后，可能还会有别的线程往recentlyChangedQueue中加入数据，
+            // 这就很坑爹了，因为1008行需要基于 recentlyChangedQueue 中的节点生成一个hashcode，如果recentlyChangedQueue
+            // 变化了，这个hashcode和app中的节点数据就不是对应的了，即app中的数据的hashcode值不是1008生成的那个。
+            // 那么回头client在用这个hashcode参与计算就不对了，就会导致client拉取增量数据后计算hashcode然后比对服务端生成的
+            // hashcode，然后发现不对，然后拉取全量数据，占用带宽，影响性能
+            // 所以：这里用write锁，防止读的时候写入。而且，注册中心本就是读多写少。所以用读写锁性能更高。用互斥锁性能低下
             write.lock();
             Iterator<RecentlyChangedItem> iter = this.recentlyChangedQueue.iterator();
             logger.debug("The number of elements in the delta queue is :"
@@ -987,6 +1017,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
             }
 
             Applications allApps = getApplications(!disableTransparentFallback);
+            // 计算hashcode
             apps.setAppsHashCode(allApps.getReconcileHashCode());
             return apps;
         } finally {
@@ -1012,6 +1043,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
      * from remote regions can be further be restricted as explained above. <code>null</code> if the application does
      * not exist locally or in remote regions.
      */
+    // 返回增量数据，即recentlyChangedQueue中的数据
     public Applications getApplicationDeltasFromMultipleRegions(String[] remoteRegions) {
         if (null == remoteRegions) {
             remoteRegions = allKnownRemoteRegions; // null means all remote regions.
@@ -1026,9 +1058,18 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         }
 
         Applications apps = new Applications();
+        // 更新版本
         apps.setVersion(responseCache.getVersionDeltaWithRegions().get());
         Map<String, Application> applicationInstancesMap = new HashMap<String, Application>();
         try {
+            // 加写锁，读的同时不能对注册中心的各个队列和registry做写操作，原子性
+
+            // 原因：如果这里不加互斥锁，1051-1065行执行完后，可能还会有别的线程往recentlyChangedQueue中加入数据，
+            // 这就很坑爹了，因为1094行需要基于 recentlyChangedQueue 中的节点生成一个hashcode，如果recentlyChangedQueue
+            // 变化了，这个hashcode和app中的节点数据就不是对应的了，即app中的数据的hashcode值不是1094生成的那个。
+            // 那么回头client在用这个hashcode参与计算就不对了，就会导致client拉取增量数据后计算hashcode然后比对服务端生成的
+            // hashcode，然后发现不对，然后拉取全量数据，占用带宽，影响性能
+            // 所以：这里用write锁，防止读的时候写入。而且，注册中心本就是读多写少。所以用读写锁性能更高。用互斥锁性能低下
             write.lock();
             Iterator<RecentlyChangedItem> iter = this.recentlyChangedQueue.iterator();
             logger.debug("The number of elements in the delta queue is :" + this.recentlyChangedQueue.size());
@@ -1073,6 +1114,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
             }
 
             Applications allApps = getApplicationsFromMultipleRegions(remoteRegions);
+            // 设置当前注册表的hashcode，用于和客户端本地的hashcode作比较，见RemoteRegionRegistry#fetchAndStoreDelta
             apps.setAppsHashCode(allApps.getReconcileHashCode());
             return apps;
         } finally {
@@ -1382,6 +1424,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         }
 
         private void makeSpaceIfNotAvailable() {
+            // 满了就删除
             if (this.size() == size) {
                 this.remove();
             }

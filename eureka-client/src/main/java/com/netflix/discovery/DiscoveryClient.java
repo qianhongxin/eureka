@@ -945,6 +945,10 @@ public class DiscoveryClient implements EurekaClient {
      *
      * @return true if the registry was fetched
      */
+    // 数据同步的hash值比对机制：如果你要在两个地方，一个分布式系统里，进行数据的同步，可以采用
+    // Hash值的思想，从一个地方的数据计算一个hash值，到另外一个地方，计算一个hash值，
+    // 保证两个hash值是一样的，确保这个数据传输过程中，没有出什么问题.全量拉取不需要比对hash值，直接用这个
+
     // 抓取注册表数据
     private boolean fetchRegistry(boolean forceFullRegistryFetch) {
         Stopwatch tracer = FETCH_REGISTRY_TIMER.start();
