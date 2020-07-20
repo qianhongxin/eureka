@@ -136,8 +136,9 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     private final AtomicReference<EvictionTask> evictionTaskRef = new AtomicReference<EvictionTask>();
 
     protected String[] allKnownRemoteRegions = EMPTY_STR_ARRAY;
-    // 我期望的是1min有多少心跳发送过来
+    // 1min最少要发送多少心跳过来，numberOfRenewsPerMinThreshold = expectedNumberOfRenewsPerMin * 0.85
     protected volatile int numberOfRenewsPerMinThreshold;
+    // 我期望的是1min有多少心跳发送过来
     protected volatile int expectedNumberOfRenewsPerMin;
 
     protected final EurekaServerConfig serverConfig;
@@ -659,7 +660,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         evict(0l);
     }
 
-    // 自我保护机制核心处理逻辑
+    // 自我保护机制核心处理逻辑，这里做的是判断client是否故障，如果是则剔除实例。但是这个故障也可能是server网络问题，所以有个自我保护机器
     // 定时执行，自动故障感知剔除算法
 
     // 不会一次性将所有故障的服务实例都摘除，每次最多讲注册表中15%的服务实例给摘除掉，所以一次没摘除所有的故障实例，下次EvictionTask        再次执行的时候，会再次摘除，分批摘取机制
@@ -678,9 +679,11 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         // if we do not that, we might wipe out whole apps before self preservation kicks in. By randomizing it,
         // the impact should be evenly distributed across all applications.
         List<Lease<InstanceInfo>> expiredLeases = new ArrayList<>();
+        // 遍历所有application
         for (Entry<String, Map<String, Lease<InstanceInfo>>> groupEntry : registry.entrySet()) {
             Map<String, Lease<InstanceInfo>> leaseMap = groupEntry.getValue();
             if (leaseMap != null) {
+                // 遍历appoication下的所有的实例
                 for (Entry<String, Lease<InstanceInfo>> leaseEntry : leaseMap.entrySet()) {
                     Lease<InstanceInfo> lease = leaseEntry.getValue();
                     // 根据心跳的续约时间来判断客户端服务是否出先故障
@@ -1377,6 +1380,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         @Override
         public void run() {
             try {
+                // 获取一个补偿时间，防止jvm的gc和调度延迟导致的时差
                 long compensationTimeMs = getCompensationTimeMs();
                 logger.info("Running the evict task with compensationTime {}ms", compensationTimeMs);
                 evict(compensationTimeMs);

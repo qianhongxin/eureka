@@ -42,6 +42,7 @@ class TaskExecutors<ID, T> {
             Thread workerThread = new Thread(threadGroup, runnable, runnable.getWorkerName());
             workerThreads.add(workerThread);
             workerThread.setDaemon(true);
+            // 启动处理数据的任务
             workerThread.start();
         }
     }

@@ -53,7 +53,7 @@ class AcceptorExecutor<ID, T> {
 
     private final AtomicBoolean isShutdown = new AtomicBoolean(false);
 
-    // 存放注册，取消，心跳等的数据队列。线程安全的
+    // 存放注册，取消，心跳等的数据队列。线程安全的。所有数据第一次写入该队列
     private final BlockingQueue<TaskHolder<ID, T>> acceptorQueue = new LinkedBlockingQueue<>();
     // 存放同步失败的数据队列，线程安全的
     private final BlockingDeque<TaskHolder<ID, T>> reprocessQueue = new LinkedBlockingDeque<>();

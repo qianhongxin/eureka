@@ -52,6 +52,7 @@ public class MeasuredRate {
     }
 
     // 加 synchronized ，isActive判断。保证只会有一个任务调度
+    // 当执行时，就表示此次调度
     public synchronized void start() {
         if (!isActive) {
             timer.schedule(new TimerTask() {
@@ -60,7 +61,7 @@ public class MeasuredRate {
                 public void run() {
                     try {
                         // Zero out the current bucket.
-                        // 将currentBucket值返回，并设置成0。然后将返回值放入lastBucket
+                        // 获取currentBucket返回值然后设置成0。然后将返回值放入lastBucket中用于后面方法获取上sampleInterval内的心跳数
                         // lastBuck存储的就是上sampleInterval时间内的值
                         lastBucket.set(currentBucket.getAndSet(0));
                     } catch (Throwable e) {
@@ -85,6 +86,7 @@ public class MeasuredRate {
      * Returns the count in the last sample interval.
      */
     // 返回lastBucket
+    // 这个lastBuck存储的就是上 sampleInterval 时间内的值。因为定时统计任务每sampleInterval执行一次
     public long getCount() {
         return lastBucket.get();
     }
@@ -93,6 +95,7 @@ public class MeasuredRate {
      * Increments the count in the current sample interval.
      */
     // 并发安全的增加currentBucket值
+    // 改方法暴露给renew调用，当有节点发送心跳时，这里心跳数会自增
     public void increment() {
         currentBucket.incrementAndGet();
     }

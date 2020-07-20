@@ -115,8 +115,12 @@ public class Lease<T> {
 
     // 闪光点：为了防止因为jvm的stop the world等导致延迟调度二导致的误判，加了补偿时间。但是也会导致新问题
     public boolean isExpired(long additionalLeaseMs) {
-        //lastUpdateTimestamp是心跳更新的时间，additionalLeaseMs是补偿时间，防止stop the world等导致的主动过期任务延迟调度导致的问题。但也会导致整体过期时间大于
+        // lastUpdateTimestamp是心跳更新的时间，additionalLeaseMs是补偿时间，防止stop the world等导致的主动过期任务延迟调度导致
+        // 的问题。但也会导致整体过期时间大于
+
         // lastUpdateTimestamp + duration，即lastUpdateTimestamp + duration+ additionalLeaseMs·
+
+        // duration默认值是90s
         return (evictionTimestamp > 0 || System.currentTimeMillis() > (lastUpdateTimestamp + duration + additionalLeaseMs));
     }
 

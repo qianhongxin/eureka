@@ -45,6 +45,7 @@ import org.slf4j.LoggerFactory;
  * @author Karthik Ranganathan, Greg Kim
  *
  */
+// 存储集群之间同步数据用的封装数据结构
 public class PeerEurekaNode {
 
     /**
@@ -78,11 +79,15 @@ public class PeerEurekaNode {
     // cancel，heartbeat，register等方法对应的数据同步到对应节点的延迟时间。因为数据同步需要时间。这里定义出延迟的时间
     // 如果同步失败再次同步时，可以和当前时间做比对
     private final long maxProcessingDelayMs;
+    // 集群注册中心服务对象
     private final PeerAwareInstanceRegistry registry;
     private final String targetHost;
+    // 服务调用的客户端
     private final HttpReplicationClient replicationClient;
 
+    // 批量同步
     private final TaskDispatcher<String, ReplicationTask> batchingDispatcher;
+    // 单一同步
     private final TaskDispatcher<String, ReplicationTask> nonBatchingDispatcher;
 
     public PeerEurekaNode(PeerAwareInstanceRegistry registry, String targetHost, String serviceUrl, HttpReplicationClient replicationClient, EurekaServerConfig config) {
@@ -104,7 +109,7 @@ public class PeerEurekaNode {
 
         String batcherName = getBatcherName();
         ReplicationTaskProcessor taskProcessor = new ReplicationTaskProcessor(targetHost, replicationClient);
-        // 将cancel，heartbeat，register等方法对应的数据，批量同步到该节点
+        // 将cancel，heartbeat，register等方法对应的数据，批量同步
         this.batchingDispatcher = TaskDispatchers.createBatchingTaskDispatcher(
                 batcherName,
                 config.getMaxElementsInPeerReplicationPool(),
@@ -115,7 +120,7 @@ public class PeerEurekaNode {
                 retrySleepTimeMs,
                 taskProcessor
         );
-        // 将cancel，heartbeat，register等方法对应的数据，逐个同步到该节点
+        // 将cancel，heartbeat，register等方法对应的数据，逐个同步
         this.nonBatchingDispatcher = TaskDispatchers.createNonBatchingTaskDispatcher(
                 targetHost,
                 config.getMaxElementsInStatusReplicationPool(),
