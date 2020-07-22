@@ -1279,7 +1279,7 @@ public class DiscoveryClient implements EurekaClient {
             // 从注册中心拉取数据的时间间隔
             int registryFetchIntervalSeconds = clientConfig.getRegistryFetchIntervalSeconds();
             int expBackOffBound = clientConfig.getCacheRefreshExecutorExponentialBackOffBound();
-            // 抓取注册节点
+            // 每隔30s定时抓取注册节点
             scheduler.schedule(
                     new TimedSupervisorTask(
                             "cacheRefresh",

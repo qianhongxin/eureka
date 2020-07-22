@@ -50,6 +50,7 @@ public class Lease<T> {
         holder = r;
         registrationTimestamp = System.currentTimeMillis();
         lastUpdateTimestamp = registrationTimestamp;
+        // durationInSecs默认是90
         duration = (durationInSecs * 1000);
 
     }

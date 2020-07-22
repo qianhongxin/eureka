@@ -110,6 +110,7 @@ class AcceptorExecutor<ID, T> {
         this.maxBatchingDelay = maxBatchingDelay;
         this.trafficShaper = new TrafficShaper(congestionRetryDelayMs, networkFailureRetryMs);
 
+        // 启动AcceptorRunner，处理acceptorQueue中的数据
         ThreadGroup threadGroup = new ThreadGroup("eurekaTaskExecutors");
         this.acceptorThread = new Thread(threadGroup, new AcceptorRunner(), "TaskAcceptor-" + id);
         this.acceptorThread.setDaemon(true);
