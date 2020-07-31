@@ -690,6 +690,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
      */
     // 下线，心跳，注册，状态变更，删除等都会同步给其他server
     // 三层队列批处理机制，同步这些变化信息到其他节点
+    // 无主异步复制
     private void replicateInstanceActionsToPeers(Action action, String appName,
                                                  String id, InstanceInfo info, InstanceStatus newStatus,
                                                  PeerEurekaNode node) {
