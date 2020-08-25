@@ -76,6 +76,8 @@ class InstanceInfoReplicator implements Runnable {
     }
 
     public boolean onDemandUpdate() {
+        // burstSize设置的是2，allowedRatePerMinute设置的是60 * this.burstSize / this.replicationIntervalSeconds
+        // replicationIntervalSeconds我们可以设置，不设置则默认是40
         if (rateLimiter.acquire(burstSize, allowedRatePerMinute)) {
             if (!scheduler.isShutdown()) {
                 scheduler.submit(new Runnable() {

@@ -403,6 +403,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
                 // 新下线一个服务实力，每秒就该少2次心跳(就是垃圾，硬编码，凭什么你就断定1秒2次心跳？)
                 if (this.expectedNumberOfRenewsPerMin > 0) {
                     // Since the client wants to cancel it, reduce the threshold (1 for 30 seconds, 2 for a minute)
+                    // 因为eureka是按照写死的一分钟两个心跳算的，所以服务下线时，将期望心跳数减2
                     this.expectedNumberOfRenewsPerMin = this.expectedNumberOfRenewsPerMin - 2;
                     this.numberOfRenewsPerMinThreshold =
                             (int) (this.expectedNumberOfRenewsPerMin * serverConfig.getRenewalPercentThreshold());

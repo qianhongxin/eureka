@@ -1071,7 +1071,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
             // 这就很坑爹了，因为1094行需要基于 recentlyChangedQueue 中的节点生成一个hashcode，如果recentlyChangedQueue
             // 变化了，这个hashcode和app中的节点数据就不是对应的了，即app中的数据的hashcode值不是1094生成的那个。
             // 那么回头client在用这个hashcode参与计算就不对了，就会导致client拉取增量数据后计算hashcode然后比对服务端生成的
-            // hashcode，然后发现不对，然后拉取全量数据，占用带宽，影响性能
+            // hashcode，然后发现不对，然后又拉取全量数据，占用带宽，影响性能
             // 所以：这里用write锁，防止读的时候写入。而且，注册中心本就是读多写少。所以用读写锁性能更高。用互斥锁性能低下
             write.lock();
             Iterator<RecentlyChangedItem> iter = this.recentlyChangedQueue.iterator();

@@ -33,6 +33,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * @author Tomasz Bak
  */
+// 基于令牌桶算法实现的限流器
 public class RateLimiter {
 
     private final long rateToMsConversion;

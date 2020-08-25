@@ -145,6 +145,7 @@ public class DiscoveryClient implements EurekaClient {
     private final Provider<HealthCheckHandler> healthCheckHandlerProvider;
     private final Provider<HealthCheckCallback> healthCheckCallbackProvider;
     private final PreRegistrationHandler preRegistrationHandler;
+    // 保存着从服务端拉取到的全量的注册数据
     private final AtomicReference<Applications> localRegionApps = new AtomicReference<Applications>();
     private final Lock fetchRegistryUpdateLock = new ReentrantLock();
     // monotonically increasing generation counter to ensure stale threads do not reset registry to an older version
@@ -1274,9 +1275,10 @@ public class DiscoveryClient implements EurekaClient {
      * Initializes all scheduled tasks.
      */
     private void initScheduledTasks() {
+        // 从注册中心拉
         if (clientConfig.shouldFetchRegistry()) {
             // registry cache refresh timer
-            // 从注册中心拉取数据的时间间隔
+            // 从注册中心拉取数据的时间间隔，默认30s
             int registryFetchIntervalSeconds = clientConfig.getRegistryFetchIntervalSeconds();
             int expBackOffBound = clientConfig.getCacheRefreshExecutorExponentialBackOffBound();
             // 每隔30s定时抓取注册节点
@@ -1294,6 +1296,7 @@ public class DiscoveryClient implements EurekaClient {
                     registryFetchIntervalSeconds, TimeUnit.SECONDS);
         }
 
+        // 将自己注册到注册中心
         if (clientConfig.shouldRegisterWithEureka()) {
             // 续约时间，默认30s。每隔30s去续约一次
             int renewalIntervalInSecs = instanceInfo.getLeaseInfo().getRenewalIntervalInSecs();
@@ -1321,6 +1324,7 @@ public class DiscoveryClient implements EurekaClient {
                     clientConfig.getInstanceInfoReplicationIntervalSeconds(),
                     2); // burstSize
 
+            // 状态变更监听器
             statusChangeListener = new ApplicationInfoManager.StatusChangeListener() {
                 @Override
                 public String getId() {
@@ -1479,6 +1483,7 @@ public class DiscoveryClient implements EurekaClient {
         }
     }
 
+    // 每隔 30s 运行一次，
     @VisibleForTesting
     void refreshRegistry() {
         try {
@@ -1514,6 +1519,7 @@ public class DiscoveryClient implements EurekaClient {
                 lastSuccessfulRegistryFetchTimestamp = System.currentTimeMillis();
             }
 
+            // 用于调试模式，打印日志，方便调试
             if (logger.isDebugEnabled()) {
                 StringBuilder allAppsHashCodes = new StringBuilder();
                 allAppsHashCodes.append("Local region apps hashcode: ");
